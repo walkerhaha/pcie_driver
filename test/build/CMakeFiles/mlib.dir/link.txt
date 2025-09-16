@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmlib.a  CMakeFiles/mlib.dir/lib/mt_pcie_f.c.o CMakeFiles/mlib.dir/lib/simlog.cc.o CMakeFiles/mlib.dir/util/cJSON.c.o
+/usr/bin/ranlib libmlib.a

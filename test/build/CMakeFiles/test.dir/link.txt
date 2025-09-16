@@ -1,0 +1,1 @@
+g++ -std=c++11 -DSPDLOG_COMPILED_LIB  -g -O0 -Wall  -rdynamic CMakeFiles/test.dir/test/base.cc.o CMakeFiles/test.dir/test/intr.cc.o CMakeFiles/test.dir/test/main.cc.o CMakeFiles/test.dir/test/mthdma.cc.o CMakeFiles/test.dir/test/stress.cc.o CMakeFiles/test.dir/test/test_thr.cc.o  -o test  libmlib.a -lpthread 

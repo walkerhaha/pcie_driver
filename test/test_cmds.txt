@@ -1,0 +1,121 @@
+sudo mount -t nfs 192.168.3.196:/home/liuy/wk_emu mnt
+cd liuy/mnt/mt-emu-pcie
+
+#read fec plic iid: 0x200143b
+busybox devmem 0x96021008
+greg 0x7f00021008
+sgreg 0x7f00021008
+#dma
+greg 0x7f00340000
+#fec sram
+greg 0x7f01e4f060
+sreg 0x7f01e4f060 0x87654321
+
+treg 0x7f01e4f060 0x1000
+
+memtr 0x7f01e40000 0x1000
+
+sreg 0x7f01e40000 0x55555555
+
+greg 0x7f01e4f060
+memt 0x7f01e40000 0x1000
+
+ssreg 0x7f01e40000 0x55555555
+sgreg 0x7f01e40000
+
+#p2p
+sgreg 0xFFC0000000
+
+7f00c00018
+
+greg 0x7f00200710
+
+
+0x96000000
+0x96402000
+
+
+//vf msi
+sreg 0x7f007a0000 0x4
+greg 0x7f007a0000
+
+
+#flr
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.0/reset
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.1/reset
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.2/reset
+
+
+#speed gen5
+setpci -s 18:00.0 cap10+30.b=5
+setpci -s 17:00.0 3e.b=42
+setpci -s 17:00.0 3e.b=2
+sleep 10s
+lspci -vvvs 18:00.0 | grep Lnk
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.0/remove
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.1/remove
+echo 1 > /sys/bus/pci/devices/0000\:17\:00.0/rescan
+
+#speed gen4
+setpci -s 18:00.0 cap10+30.b=4
+setpci -s 17:00.0 3e.b=42
+setpci -s 17:00.0 3e.b=2
+lspci -vvvs 18:00.0 | grep Lnk
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.0/remove
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.1/remove
+echo 1 > /sys/bus/pci/devices/0000\:17\:00.0/rescan
+
+#speed gen3
+setpci -s 18:00.0 cap10+30.b=3
+setpci -s 17:00.0 3e.b=42
+setpci -s 17:00.0 3e.b=2
+lspci -vvvs 18:00.0 | grep Lnk
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.0/remove
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.1/remove
+echo 1 > /sys/bus/pci/devices/0000\:17\:00.0/rescan
+
+#speed gen2
+setpci -s 18:00.0 cap10+30.b=2
+setpci -s 17:00.0 3e.b=42
+setpci -s 17:00.0 3e.b=2
+lspci -vvvs 18:00.0 | grep Lnk
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.0/remove
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.1/remove
+echo 1 > /sys/bus/pci/devices/0000\:17\:00.0/rescan
+
+#speed gen1
+setpci -s 18:00.0 cap10+30.b=1
+setpci -s 17:00.0 3e.b=42
+setpci -s 17:00.0 3e.b=2
+lspci -vvvs 18:00.0 | grep Lnk
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.0/remove
+echo 1 > /sys/bus/pci/devices/0000\:18\:00.1/remove
+echo 1 > /sys/bus/pci/devices/0000\:17\:00.0/rescan
+
+#AER
+setpci -s 17:0.0 0x188.l=0xD4100040
+setpci -s 17:0.0 0x188.l
+setpci -s 17:0.0 0x18c.l=0x0
+setpci -s 17:0.0 0x18c.l
+
+setpci -s 18:0.0 ecap_aer+8.l=0x00400000
+setpci -s 18:0.0 ecap_aer+8.l
+
+setpci -s 18:0.0 ecap_aer+c.l=00462030
+setpci -s 18:0.0 ecap_aer+c.l
+
+
+#mtdma stop
+setpci -s 18:00.0 3a4.l=0
+sgreg 0x7f00802000
+ssreg 0x7f00802000 0x0
+busybox devmem 0x96802000 32 0x2
+
+#vf mtdma reg
+select 2
+greg 0x7f00102000
+sreg 0x7f00102000 0x3
+
+#dma reset bit13
+sgreg 0x7f00090218
+ssreg 0x7f00090218 0x2000
