@@ -154,13 +154,13 @@ static void gpu_eata_common_init(struct emu_pcie *emu_pcie, int gpu_idx) {
     sreg_u32(EATA_REG_OF_CTRL(GPU_EATA_GC_CFG_BASE(gpu_idx))                     , 0x7);
     //sreg_u32(EATA_REG_OF_CTRL(GPU_EATA_GC_CFG_BASE(gpu_idx))                   , 0x0);
     //sreg_u32(EATA_REG_OF_FWD_ADDR_low(GPU_EATA_GC_CFG_BASE(gpu_idx))           , 0x0);
-    //sreg_u32(EATA_REG_OF_FWD_ADDR_high(GPU_EATA_GC_CFG_BASE(gpu_idx)gpu_idx)         , 0x10);
+    //sreg_u32(EATA_REG_OF_FWD_ADDR_high(GPU_EATA_GC_CFG_BASE(gpu_idx)gpu_idx)   , 0x10);
     sreg_u32(EATA_REG_OF_VMINT_CTRL_LOW(GPU_EATA_GC_CFG_BASE(gpu_idx))           , 0xFFFFFFFF);
     sreg_u32(EATA_REG_OF_VMINT_CTRL_HIGH(GPU_EATA_GC_CFG_BASE(gpu_idx))          , 0x0000FFFF);
     sreg_u32(EATA_REG_OF_CTRL(GPU_EATA_GC_CFG_BASE(gpu_idx))                     , 0x800007);
     sreg_u32(EATA_REG_OF_VF_CFG_EN(GPU_EATA_GC_CFG_BASE(gpu_idx))                , 0x1);
     for(x=0; x<EATA_VF_NUM_PER_GPU; x++) {
-            sreg_u32(EATA_REG_OF_OSID_SET(GPU_EATA_GC_CFG_BASE(gpu_idx), x)         , gpu_idx*EATA_VF_NUM_PER_GPU  + x);
+            sreg_u32(EATA_REG_OF_OSID_SET(GPU_EATA_GC_CFG_BASE(gpu_idx), x)      , gpu_idx*EATA_VF_NUM_PER_GPU  + x);
     }
     printk("eata_init : cfg gpu eata\n");
 }
@@ -169,7 +169,7 @@ static void vid_eata_common_init(struct emu_pcie *emu_pcie, int vid_idx) {
     sreg_u32(EATA_REG_OF_CTRL(VID_SS_EATA_GC_CFG_BASE(vid_idx))                      , 0x7);
     //sreg_u32(EATA_REG_OF_CTRL(VID_SS_EATA_GC_CFG_BASE(vid_idx))                    , 0x0);
     //sreg_u32(EATA_REG_OF_FWD_ADDR_low(VID_SS_EATA_GC_CFG_BASE(vid_idx))            , 0x0);
-    //sreg_u32(EATA_REG_OF_FWD_ADDR_high(VID_SS_EATA_GC_CFG_BASE(vid_idx)vid_idx)          , 0x10);
+    //sreg_u32(EATA_REG_OF_FWD_ADDR_high(VID_SS_EATA_GC_CFG_BASE(vid_idx)vid_idx)    , 0x10);
     sreg_u32(EATA_REG_OF_VMINT_CTRL_LOW(VID_SS_EATA_GC_CFG_BASE(vid_idx))            , 0xFFFFFFFF);
     sreg_u32(EATA_REG_OF_VMINT_CTRL_HIGH(VID_SS_EATA_GC_CFG_BASE(vid_idx))           , 0x0000FFFF);
     sreg_u32(EATA_REG_OF_CTRL(VID_SS_EATA_GC_CFG_BASE(vid_idx))                      , 0x800007);

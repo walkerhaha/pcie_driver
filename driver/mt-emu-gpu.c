@@ -120,8 +120,6 @@ static struct attribute *emu_pcie_attrs[] =
 
 ATTRIBUTE_GROUPS(emu_pcie);
 
-
-
 static u16 mt_pci_find_vsec_capability(struct pci_dev *dev, u16 vendor, int cap)
 {
 	u16 vsec = 0;
@@ -157,9 +155,9 @@ static void pcie_emu_gpu_free(struct pci_dev *pcid)
 			mtdma_remove(emu_pcie->emu_mtdma.mtdma_chip);
 		}
 
-                if (emu_pcie->region[6].vaddr) {
-                        pci_iounmap(pcid, emu_pcie->region[6].vaddr);
-                }
+		if (emu_pcie->region[6].vaddr) {
+			pci_iounmap(pcid, emu_pcie->region[6].vaddr);
+		}
 
 		misc_deregister(&emu_pcie->miscdev);
 
@@ -177,7 +175,7 @@ static void mt_emu_vf_enable(struct emu_pcie *emu_pcie, int num) {
 		pci_enable_sriov(emu_pcie->pcid, num);
 	}
 	else {
-		pci_disable_sriov(emu_pcie->pcid);			
+		pci_disable_sriov(emu_pcie->pcid);
 	}
 
 	emu_pcie->vf_num = num;
@@ -199,85 +197,85 @@ static inline int pci_rebar_bytes_to_size1(u64 bytes)
 
 static void __release_child_resources(struct resource *r)
 {
-        struct resource *tmp, *p;
-        resource_size_t size;
+	struct resource *tmp, *p;
+	resource_size_t size;
 
-        p = r->child;
-        r->child = NULL;
-        while (p) {
-                tmp = p;
-                p = p->sibling;
+	p = r->child;
+	r->child = NULL;
+	while (p) {
+		tmp = p;
+		p = p->sibling;
 
-                tmp->parent = NULL;
-                tmp->sibling = NULL;
-                __release_child_resources(tmp);
+		tmp->parent = NULL;
+		tmp->sibling = NULL;
+		__release_child_resources(tmp);
 
-                printk(KERN_DEBUG "release child resource %pR\n", tmp);
-                /* need to restore size, and keep flags */
-                size = resource_size(tmp);
-                tmp->start = 0;
-                tmp->end = size - 1;
-        }
+		printk(KERN_DEBUG "release child resource %pR\n", tmp);
+		/* need to restore size, and keep flags */
+		size = resource_size(tmp);
+		tmp->start = 0;
+		tmp->end = size - 1;
+	}
 }
 
 static int resize_pcie_bar(struct pci_dev *pdev, u64 new_size)
 {
-    u16 cmd;
-    int rbar_size, ret;
-    unsigned int pos;
-    struct resource *res;
-    int i;
+	u16 cmd;
+	int rbar_size, ret;
+	unsigned int pos;
+	struct resource *res;
+	int i;
 
-    // 查找 Resizable BAR 能力
-    pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_REBAR);
-    if (!pos) {
-        dev_warn(&pdev->dev, "PCI device does not support Resizable BAR\n");
-        return -ENODEV;
-    }
+	// 查找 Resizable BAR 能力
+	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_REBAR);
+	if (!pos) {
+		dev_warn(&pdev->dev, "PCI device does not support Resizable BAR\n");
+		return -ENODEV;
+	}
 
-    // 将新大小转换为最接近的 BAR 大小索引
-    rbar_size = order_base_2(((new_size >> 20) | 1)) - 1;
+	// 将新大小转换为最接近的 BAR 大小索引
+	rbar_size = order_base_2(((new_size >> 20) | 1)) - 1;
 
-    // 读取 PCI 命令寄存器并禁用内存解码
-    pci_read_config_word(pdev, PCI_COMMAND, &cmd);
-    pci_write_config_word(pdev, PCI_COMMAND, cmd & ~PCI_COMMAND_MEMORY);
+	// 读取 PCI 命令寄存器并禁用内存解码
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
+	pci_write_config_word(pdev, PCI_COMMAND, cmd & ~PCI_COMMAND_MEMORY);
 
-    // 释放 BAR2 资源
-    res = pdev->resource + TARGET_BAR;
-    if (res->flags & IORESOURCE_MEM) {
-        printk(KERN_INFO "Releasing BAR2: start=%llx, end=%llx\n", res->start, res->end);
-        pci_release_resource(pdev, TARGET_BAR);
-    }
+	// 释放 BAR2 资源
+	res = pdev->resource + TARGET_BAR;
+	if (res->flags & IORESOURCE_MEM) {
+		printk(KERN_INFO "Releasing BAR2: start=%llx, end=%llx\n", res->start, res->end);
+		pci_release_resource(pdev, TARGET_BAR);
+	}
 
-    // 释放桥设备的资源（如果有）
-    for (i = PCI_BRIDGE_RESOURCES; i < PCI_BRIDGE_RESOURCE_END; i++) {
-            __release_child_resources(pdev->bus->self->resource+i);
-    }
+	// 释放桥设备的资源（如果有）
+	for (i = PCI_BRIDGE_RESOURCES; i < PCI_BRIDGE_RESOURCE_END; i++) {
+		__release_child_resources(pdev->bus->self->resource+i);
+	}
 
-    // 调整 BAR2 资源大小
-    ret = pci_resize_resource(pdev, TARGET_BAR, rbar_size);
-    if (ret == -ENOSPC) {
-        dev_err(&pdev->dev, "Not enough PCI address space for a large BAR\n");
-    } else if (ret && ret != -ENOTSUPP) {
-        dev_err(&pdev->dev, "Problem resizing BAR2 (%d)\n", ret);
-    } else if (ret == -ENOTSUPP) {
-        dev_err(&pdev->dev, "Resizable BAR is not supported\n");
-    }
+	// 调整 BAR2 资源大小
+	ret = pci_resize_resource(pdev, TARGET_BAR, rbar_size);
+	if (ret == -ENOSPC) {
+		dev_err(&pdev->dev, "Not enough PCI address space for a large BAR\n");
+	} else if (ret && ret != -ENOTSUPP) {
+		dev_err(&pdev->dev, "Problem resizing BAR2 (%d)\n", ret);
+	} else if (ret == -ENOTSUPP) {
+		dev_err(&pdev->dev, "Resizable BAR is not supported\n");
+	}
 
-    // 重新分配总线的未分配资源
-    pci_assign_unassigned_bus_resources(pdev->bus);
+	// 重新分配总线的未分配资源
+	pci_assign_unassigned_bus_resources(pdev->bus);
 
-    // 检查是否成功调整 BAR2
-    if (ret || (pci_resource_flags(pdev, TARGET_BAR) & IORESOURCE_UNSET)) {
-        dev_err(&pdev->dev, "BAR2 resource is not set after resize\n");
-        return -ENODEV;
-    }
+	// 检查是否成功调整 BAR2
+	if (ret || (pci_resource_flags(pdev, TARGET_BAR) & IORESOURCE_UNSET)) {
+		dev_err(&pdev->dev, "BAR2 resource is not set after resize\n");
+		return -ENODEV;
+	}
 
-    // 恢复 PCI 命令寄存器中的原始设置
-    pci_write_config_word(pdev, PCI_COMMAND, cmd);
+	// 恢复 PCI 命令寄存器中的原始设置
+	pci_write_config_word(pdev, PCI_COMMAND, cmd);
 
-    dev_info(&pdev->dev, "Resized BAR2 to %llu bytes\n", new_size);
-    return 0;
+	dev_info(&pdev->dev, "Resized BAR2 to %llu bytes\n", new_size);
+	return 0;
 }
 
 static int resize_fb_bar(struct pci_dev *pcid, u64 size)
@@ -297,7 +295,7 @@ static int resize_fb_bar(struct pci_dev *pcid, u64 size)
 		__release_child_resources(pcid->bus->self->resource+i);
 	}
 
-    	printk("rbar_size=%x\n", rbar_size);
+	printk("rbar_size=%x\n", rbar_size);
 	r = pci_resize_resource(pcid, 2, rbar_size);
 	if (r == -ENOSPC)
 		printk("Not enough PCI address space for a large BAR.");
@@ -334,90 +332,90 @@ static void iatu_init(struct emu_pcie *emu_pcie) {
 	for(i=0; i<VF_NUM; i++) {
 		pcie_prog_inbound_atu_vf(emu_pcie, i, i, 2, LADDR_VGPU_BASE);
 		mtdma_eata_desc_en(emu_pcie, i, 0, LADDR_VGPU(i));
-//		for(j=0; j<EATA_VID_NUM; j++)
-//			vid_eata_desc_en(emu_pcie, j, i, 0, LADDR_VGPU(i));
-//		for(j=0; j<GPU_CORE_NUM; j++)
-//			gpu_eata_desc_en(emu_pcie, j, i, 0, LADDR_VGPU(i));
+		//		for(j=0; j<EATA_VID_NUM; j++)
+		//			vid_eata_desc_en(emu_pcie, j, i, 0, LADDR_VGPU(i));
+		//		for(j=0; j<GPU_CORE_NUM; j++)
+		//			gpu_eata_desc_en(emu_pcie, j, i, 0, LADDR_VGPU(i));
 	}
 }
 
 dma_addr_t debug_buf_dma_addr;
 
 static void pcie_emu_gpu_init_debug_ob(struct device * dev){
-        unsigned long test_iova = 0x8000000000LL-0x100000;
-        unsigned int  debug_buf_phy_len = 0x400000;
-        int ret;
+	unsigned long test_iova = 0x8000000000LL-0x100000;
+	unsigned int  debug_buf_phy_len = 0x400000;
+	int ret;
 	debug_buf_dma_addr = kmalloc(8, GFP_KERNEL);
-        void * debug_buf_va = dma_alloc_coherent(dev, debug_buf_phy_len, debug_buf_dma_addr, GFP_KERNEL|GFP_DMA);
+	void * debug_buf_va = dma_alloc_coherent(dev, debug_buf_phy_len, debug_buf_dma_addr, GFP_KERNEL|GFP_DMA);
 	printk("va=%pK, pa=%lx\n", debug_buf_va, virt_to_phys(debug_buf_va));
-        ret = iommu_map(iommu_get_domain_for_dev(dev), test_iova, virt_to_phys(debug_buf_va), debug_buf_phy_len, IOMMU_READ|IOMMU_WRITE|IOMMU_CACHE);
-        if(ret)
-                dev_err(dev, "iommu map failed ret:%d\n", ret);
+	ret = iommu_map(iommu_get_domain_for_dev(dev), test_iova, virt_to_phys(debug_buf_va), debug_buf_phy_len, IOMMU_READ|IOMMU_WRITE|IOMMU_CACHE);
+	if(ret)
+		dev_err(dev, "iommu map failed ret:%d\n", ret);
 }
 
 static void pcie_emu_gpu_free_debug_ob(struct device * dev){
 	unsigned long test_iova = 0x8000000000LL-0x100000;
-        void * cpu_addr  = kmalloc(8, GFP_KERNEL);
-        unsigned int  debug_buf_phy_len = 0x400000;
-        dma_free_coherent(dev, debug_buf_phy_len, cpu_addr, debug_buf_dma_addr);
-        iommu_unmap(iommu_get_domain_for_dev(dev), test_iova, debug_buf_phy_len);
+	void * cpu_addr  = kmalloc(8, GFP_KERNEL);
+	unsigned int  debug_buf_phy_len = 0x400000;
+	dma_free_coherent(dev, debug_buf_phy_len, cpu_addr, debug_buf_dma_addr);
+	iommu_unmap(iommu_get_domain_for_dev(dev), test_iova, debug_buf_phy_len);
 	kfree(cpu_addr);
 	kfree(debug_buf_dma_addr);
 }
 
 void __iomem *map_pci_rom_bar(struct pci_dev *pdev) {
-    int err;
-    resource_size_t rom_base;
-    resource_size_t rom_size;
-    void __iomem *rom_virt_addr;
+	int err;
+	resource_size_t rom_base;
+	resource_size_t rom_size;
+	void __iomem *rom_virt_addr;
 
-    // 启用 PCI 设备
-    err = pci_enable_device(pdev);
-    if (err) {
-        printk(KERN_ERR "无法启用 PCI 设备\n");
-        return NULL;
-    }
+	// 启用 PCI 设备
+	err = pci_enable_device(pdev);
+	if (err) {
+		printk(KERN_ERR "无法启用 PCI 设备\n");
+		return NULL;
+	}
 
-    // 启用 ROM BAR (BAR 6)
-    err = pci_enable_rom(pdev);
-    if (err) {
-        printk(KERN_ERR "启用 ROM 失败\n");
-        pci_disable_device(pdev);
-        return NULL;
-    }
+	// 启用 ROM BAR (BAR 6)
+	err = pci_enable_rom(pdev);
+	if (err) {
+		printk(KERN_ERR "启用 ROM 失败\n");
+		pci_disable_device(pdev);
+		return NULL;
+	}
 
-    // 获取 ROM BAR 的物理地址
-    rom_base = pci_resource_start(pdev, 6);
-    if (!rom_base) {
-        printk(KERN_ERR "ROM BAR 地址无效\n");
-        pci_disable_rom(pdev);
-        pci_disable_device(pdev);
-        return NULL;
-    }
+	// 获取 ROM BAR 的物理地址
+	rom_base = pci_resource_start(pdev, 6);
+	if (!rom_base) {
+		printk(KERN_ERR "ROM BAR 地址无效\n");
+		pci_disable_rom(pdev);
+		pci_disable_device(pdev);
+		return NULL;
+	}
 
-    // 获取 ROM BAR 的大小
-    rom_size = pci_resource_len(pdev, 6);
+	// 获取 ROM BAR 的大小
+	rom_size = pci_resource_len(pdev, 6);
 
-    // 映射 ROM BAR 到虚拟地址
-    rom_virt_addr = pci_iomap(pdev, 6, rom_size);
-    if (!rom_virt_addr) {
-        printk(KERN_ERR "无法映射 ROM BAR\n");
-        pci_disable_rom(pdev);
-        pci_disable_device(pdev);
-        return NULL;
-    }
+	// 映射 ROM BAR 到虚拟地址
+	rom_virt_addr = pci_iomap(pdev, 6, rom_size);
+	if (!rom_virt_addr) {
+		printk(KERN_ERR "无法映射 ROM BAR\n");
+		pci_disable_rom(pdev);
+		pci_disable_device(pdev);
+		return NULL;
+	}
 
-    printk(KERN_INFO "ROM BAR 虚拟地址: %p\n", rom_virt_addr);
-    return rom_virt_addr;
+	printk(KERN_INFO "ROM BAR 虚拟地址: %p\n", rom_virt_addr);
+	return rom_virt_addr;
 }
 
 // 在使用完 ROM BAR 后调用该函数来释放资源
 void unmap_pci_rom_bar(struct pci_dev *pdev, void __iomem *rom_virt_addr) {
-    if (rom_virt_addr) {
-        pci_iounmap(pdev, rom_virt_addr);
-    }
-    pci_disable_rom(pdev);
-    pci_disable_device(pdev);
+	if (rom_virt_addr) {
+		pci_iounmap(pdev, rom_virt_addr);
+	}
+	pci_disable_rom(pdev);
+	pci_disable_device(pdev);
 }
 
 static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *ent)
@@ -470,12 +468,12 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 #endif
 
 	// kangj dma
-//	/* DMA configuration */
-//	err = dma_set_mask_and_coherent(&pcid->dev, DMA_BIT_MASK(64));
-//	if (err) {
-//		pci_err(pcid, "DMA mask 64 set failed\n");
-//		return err;
-//	}
+	//	/* DMA configuration */
+	//	err = dma_set_mask_and_coherent(&pcid->dev, DMA_BIT_MASK(64));
+	//	if (err) {
+	//		pci_err(pcid, "DMA mask 64 set failed\n");
+	//		return err;
+	//	}
 
 	/* Data structure allocation */
 	emu_pcie = devm_kzalloc(dev, sizeof(*emu_pcie), GFP_KERNEL);
@@ -511,7 +509,7 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 		emu_pcie->region[i].size = pci_resource_len(pcid, i);
 		if(emu_pcie->region[i].size != 0) {
 			dev_info(&pcid->dev, "pcie region%d paddr:0x%llx size:0x%llx vaddr:0x%llx ",
-				i, emu_pcie->region[i].paddr, emu_pcie->region[i].size, (u64)(emu_pcie->region[i].vaddr));
+					i, emu_pcie->region[i].paddr, emu_pcie->region[i].size, (u64)(emu_pcie->region[i].vaddr));
 		}
 	}
 
@@ -520,7 +518,7 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 	// kangj iatu
 	//writel(0x7f, emu_pcie->region[0].vaddr + 0x400018);	
 	writel(0x4, emu_pcie->region[0].vaddr + 0x71c018);
-//	iatu_init(emu_pcie);
+	//	iatu_init(emu_pcie);
 
 	//pcie_intr_init(emu_pcie);
 
@@ -558,7 +556,7 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 	}
 
 	build_dma_info(emu_dmabuf->mtdma_vaddr, emu_dmabuf->mtdma_paddr, emu_pcie->region[BAR_0].vaddr, emu_pcie->region[BAR_2].vaddr, 0, MTDMA_MAX_WR_CH, MTDMA_MAX_RD_CH, &dma_info);
-        mtdma_bare_init(&emu_pcie->dma_bare, &dma_info);
+	mtdma_bare_init(&emu_pcie->dma_bare, &dma_info);
 	/* Starting MTDMA driver */
 	if( 0 != emu_mtdma_init(&emu_pcie->emu_mtdma, pcid, &dma_info)){
 		pr_err("emu_mtdma_init failed\n");
@@ -585,7 +583,7 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 #endif
 	dev_info(&pcid->dev, "Probe success\n");
 
-// debug for 512GB ob
+	// debug for 512GB ob
 	//pcie_emu_gpu_init_debug_ob(&pcid->dev);
 	return 0;
 error:
@@ -598,14 +596,14 @@ static void pcie_emu_gpu_remove(struct pci_dev *pcid)
 {
 	pci_disable_sriov(pcid);
 	pcie_emu_gpu_free(pcid);
-// debug for 512GB ob
+	// debug for 512GB ob
 	//pcie_emu_gpu_free_debug_ob(&pcid->dev);
 
 	dev_notice(&pcid->dev, "Removed %04X:%04X\n", pcid->vendor, pcid->device);
 }
 
 static pci_ers_result_t emu_gpu_error_detected(struct pci_dev *pdev,
-						pci_channel_state_t state)
+		pci_channel_state_t state)
 {
 	struct emu_pcie *emu_pcie = pci_get_drvdata(pdev);
 
@@ -648,9 +646,9 @@ static void emu_gpu_error_resume(struct pci_dev *pdev)
 }
 
 static const struct pci_error_handlers emu_gpu_err_handler = {
-    .error_detected = emu_gpu_error_detected,
-    .slot_reset = emu_gpu_slot_reset,
-    .resume     = emu_gpu_error_resume,
+	.error_detected = emu_gpu_error_detected,
+	.slot_reset = emu_gpu_slot_reset,
+	.resume     = emu_gpu_error_resume,
 };
 
 static const struct pci_device_id pcie_emu_gpu_ids[] = {

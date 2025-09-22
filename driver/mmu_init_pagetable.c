@@ -67,8 +67,8 @@ void gen_va_pool(void) {
 					break;
 				default:
 					va_pool[i][j] = temp_addr;
-                	                temp_addr = temp_addr + 1;
-                	                break;
+						temp_addr = temp_addr + 1;
+						break;
 			}
 		}
 	}
@@ -140,8 +140,8 @@ void gen_pa_pool(void) {
 						break;
 					default:
 						pa_pool[i][j] = pa_temp_addr;
-                                                pa_temp_addr  = pa_temp_addr + 1;
-                                                break;
+						pa_temp_addr  = pa_temp_addr + 1;
+						break;
 				}
 			}
 		}
@@ -193,7 +193,7 @@ void gen_page_desc(uint64_t vpage, uint8_t ctxt_id, uint8_t va_pool_index, uint8
 		pd_index = ((va_page >> 9) & 0x1ff);
 	}else {
 		pr_index = ((va_page >> 27) & 0x1ff);
-                pd_index = ((va_page >> 18) & 0x1ff);
+		pd_index = ((va_page >> 18) & 0x1ff);
 	}
 
 	switch(va_size) {
@@ -223,7 +223,7 @@ void gen_page_desc(uint64_t vpage, uint8_t ctxt_id, uint8_t va_pool_index, uint8
 			break;
 		default:
 			pt_index = (va_page & 0x1ff);
-                        break;
+			break;
 	}
 
 	for(i=0;i<ctxt_id+1; i++) {

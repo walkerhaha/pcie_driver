@@ -15,8 +15,8 @@
 
 
 typedef struct _video_mm_info_struct {
-unsigned long   total_pages; 
-unsigned long   alloc_pages; 
+unsigned long   total_pages;
+unsigned long   alloc_pages;
 unsigned long   free_pages;
 unsigned long   page_size;
 } vmem_info_t;
@@ -24,7 +24,7 @@ unsigned long   page_size;
 
 typedef unsigned long long  vmem_key_t;
 
-#define VMEM_PAGE_SIZE           (16*1024ULL)
+#define VMEM_PAGE_SIZE          (16*1024ULL)
 
 #define MAKE_KEY(_a, _b)        (((vmem_key_t)_a)<<32 | _b)
 #define KEY_TO_VALUE(_key)      (_key>>32)

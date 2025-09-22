@@ -1,13 +1,13 @@
 //-----------------------------------------------------------------------------
 // COPYRIGHT (C) 2020   CHIPS&MEDIA INC. ALL RIGHTS RESERVED
-// 
+//
 // This file is distributed under BSD 3 clause and LGPL2.1 (dual license)
 // SPDX License Identifier: BSD-3-Clause
 // SPDX License Identifier: LGPL-2.1-only
-// 
+//
 // The entire notice above must be reproduced on all authorized copies.
-// 
-// Description  : 
+//
+// Description  :
 //-----------------------------------------------------------------------------
 
 #include <stdio.h>
@@ -17,7 +17,7 @@
 
 #ifdef MM_DEBUG
 #ifdef _MSC_VER
-#define DPRINT(_fmt, ...)       printf(_fmt, __VA_ARGS__) 
+#define DPRINT(_fmt, ...)       printf(_fmt, __VA_ARGS__)
 #else
 #define DPRINT(_fmt, ...)       printf(_fmt, args...)
 #endif
@@ -491,7 +491,7 @@ vmem_alloc(
     PhysicalAddress  ptr;
 
     if (mm == NULL) {
-		DPRINT("vmem_alloc: invalid handle\n");
+        DPRINT("vmem_alloc: invalid handle\n");
         return (PhysicalAddress)-1;
     }
 
@@ -537,7 +537,7 @@ vmem_free(
     int merge_page_no, merge_page_size, free_page_size;
 
     if (mm == NULL) {
-		DPRINT("vmem_free: invalid handle\n");
+        DPRINT("vmem_free: invalid handle\n");
         return -1;
     }
 
@@ -617,7 +617,7 @@ vmem_get_info(
     )
 {
     if (mm == NULL) {
-		//DPRINT("vmem_get_info: invalid handle\n");
+        //DPRINT("vmem_get_info: invalid handle\n");
         return -1;
     }
 

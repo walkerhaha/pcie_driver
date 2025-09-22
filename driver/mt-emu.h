@@ -68,8 +68,8 @@ struct dma_bare {
 
 struct emu_mtdma {
 	struct mtdma_chip         *mtdma_chip;
-    struct semaphore 		    sem_rd[PCIE_DMA_CH_RD_NUM];
-    struct semaphore 		    sem_wr[PCIE_DMA_CH_WR_NUM];
+	struct semaphore 		    sem_rd[PCIE_DMA_CH_RD_NUM];
+	struct semaphore 		    sem_wr[PCIE_DMA_CH_WR_NUM];
 	struct completion           done_rd[PCIE_DMA_CH_RD_NUM];
 	struct completion           done_wr[PCIE_DMA_CH_WR_NUM];
 };
@@ -132,31 +132,31 @@ static inline struct emu_dmabuf *file_to_mtdma(struct file *file)
 
 static void pcie_prog_inbound_atu(struct emu_pcie *emu_pcie, u8 index, u8 func, u8 bar, u64 local_addr)
 {
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(local_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(local_addr));
 
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL1), PCIE_ATU_INCREASE_REGION_SIZE | (func << 20));
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_BAR_MODE_ENABLE | PCIE_ATU_FUNC_NUM_MATCH_EN | (bar << 8));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL1), PCIE_ATU_INCREASE_REGION_SIZE | (func << 20));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_BAR_MODE_ENABLE | PCIE_ATU_FUNC_NUM_MATCH_EN | (bar << 8));
 	greg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2));
 }
 
 static void pcie_prog_inbound_atu_vf(struct emu_pcie *emu_pcie, u8 index, u8 func, u8 bar, u64 local_addr)
 {
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(local_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(local_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL1), 0);
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL3), func);
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_VFBAR_MODE_ENABLE | PCIE_ATU_VFMATCH_ENABLE | (bar << 8));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL1), 0);
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL3), func);
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_VFBAR_MODE_ENABLE | PCIE_ATU_VFMATCH_ENABLE | (bar << 8));
 	greg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2));
 }
 
 static void pcie_prog_inbound_atu_vf_seperate(struct emu_pcie *emu_pcie, u8 index, u8 func, u8 bar, u64 local_addr)
 {
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(local_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(local_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL1), PCIE_ATU_INCREASE_REGION_SIZE);
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL3), func);
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_BAR_MODE_ENABLE | PCIE_ATU_VFMATCH_ENABLE |PCIE_ATU_FUNC_NUM_MATCH_EN| (bar << 8));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL1), PCIE_ATU_INCREASE_REGION_SIZE);
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL3), func);
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_BAR_MODE_ENABLE | PCIE_ATU_VFMATCH_ENABLE |PCIE_ATU_FUNC_NUM_MATCH_EN| (bar << 8));
 	greg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2));
 }
 
@@ -164,37 +164,37 @@ static void pcie_prog_outbound_atu(struct emu_pcie *emu_pcie, u8 index, u8 func,
 {
 	u64 limit_addr = local_addr + size - 1;
 
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_BASE), lower_32_bits(local_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_BASE), upper_32_bits(local_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_LIMIT), lower_32_bits(limit_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_LIMIT), upper_32_bits(limit_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(remote_addr));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(remote_addr));
-//    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL1), (upper_32_bits(size - 1) ? PCIE_ATU_INCREASE_REGION_SIZE : 0) | (func << 20));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL1), PCIE_ATU_INCREASE_REGION_SIZE | (func << 20));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_DMA_BYPASS);
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_BASE), lower_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_BASE), upper_32_bits(local_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_LIMIT), lower_32_bits(limit_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_LIMIT), upper_32_bits(limit_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_TARGET), lower_32_bits(remote_addr));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_TARGET), upper_32_bits(remote_addr));
+	//    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL1), (upper_32_bits(size - 1) ? PCIE_ATU_INCREASE_REGION_SIZE : 0) | (func << 20));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL1), PCIE_ATU_INCREASE_REGION_SIZE | (func << 20));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_DMA_BYPASS);
 	greg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL2));
 }
 
 static void pcie_disable_inbound_atu(struct emu_pcie *emu_pcie, u8 index)
 {
-    sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), 0);
+	sreg_u32(REG_PCIE_IP_IATU(index, 1, PCIE_ATU_UNR_REGION_CTRL2), 0);
 }
 
 static void pcie_disable_outbound_atu(struct emu_pcie *emu_pcie, u8 index)
 {
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL2), 0);
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL2), 0);
 }
 
 
 #if 0
 static void pcie_prog_outbound_atu_vf(u8 index, u8 func, u8 bar, u64 cpu_addr)
 {
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_TARGET), cpu_addr);
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_TARGET), (cpu_addr>>32));
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL1), 0);
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL3), func);
-    sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_VFBAR_MODE_ENABLE | PCIE_ATU_VFMATCH_ENABLE | (bar << 8));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_LOWER_TARGET), cpu_addr);
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_UPPER_TARGET), (cpu_addr>>32));
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL1), 0);
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL3), func);
+	sreg_u32(REG_PCIE_IP_IATU(index, 0, PCIE_ATU_UNR_REGION_CTRL2), PCIE_ATU_ENABLE | PCIE_ATU_VFBAR_MODE_ENABLE | PCIE_ATU_VFMATCH_ENABLE | (bar << 8));
 }
 #endif
 

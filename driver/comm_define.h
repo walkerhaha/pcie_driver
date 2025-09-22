@@ -12,13 +12,13 @@
 ////////////////////////////////////////////////////////////////////
 // memory mapping
 ////////////////////////////////////////////////////////////////////
-#define GPU_BAR0_SHARED_SRAM_BASE		(0x1c00000)
-#define GPU_BAR2_SHARED_SRAM_BASE		(0x10000000)
-#define GPU_BAR4_SHARED_SRAM_BASE		(0x0000)
-#define APU_SHARED_SRAM_BASE			(0x0)
-#define SHARED_SRAM_SIZE			(0xc0000)
-#define SHARED_SRAM_SANITY_SIZE			(0x4000)
-#define DDR_RANDOM_SIZE				(0x40)
+#define GPU_BAR0_SHARED_SRAM_BASE                (0x1c00000)
+#define GPU_BAR2_SHARED_SRAM_BASE                (0x10000000)
+#define GPU_BAR4_SHARED_SRAM_BASE                (0x0000)
+#define APU_SHARED_SRAM_BASE                     (0x0)
+#define SHARED_SRAM_SIZE                         (0xc0000)
+#define SHARED_SRAM_SANITY_SIZE                  (0x4000)
+#define DDR_RANDOM_SIZE                          (0x40)
 #define DDR_BASE                                 (0x0)
 #define DDR_LIMIT                                (0xc00000000)
 #define GPU_REG_BASE                             (0x7f00000000ULL)
@@ -627,10 +627,10 @@
 #define LINK2_MEM_LIMIT                          (0x2c000000000)
 #define LINK3_MEM_BASE                           (0x2c000000000)
 #define LINK3_MEM_LIMIT                          (0x30000000000)
-//#define LINK4_MEM_BASE                           (0x30000000000)
-//#define LINK4_MEM_LIMIT                          (0x34000000000)
-//#define LINK5_MEM_BASE                           (0x34000000000)
-//#define LINK5_MEM_LIMIT                          (0x38000000000)
+//#define LINK4_MEM_BASE                         (0x30000000000)
+//#define LINK4_MEM_LIMIT                        (0x34000000000)
+//#define LINK5_MEM_BASE                         (0x34000000000)
+//#define LINK5_MEM_LIMIT                        (0x38000000000)
 
 //|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 //|                                                              Multi-Instance Declaration Begin                                                                                    |
@@ -1019,8 +1019,8 @@
 #define LOWPOWER_CFG_FLAG           (TOOL_BASE + 0xa0)
 
 #ifdef CPU_FEC_VRF
-//#define FEC_PRINT_TYPE              (FEC_TOOL_BASE + 0x8)
-//#define FEC_PRINT_ADDR              (FEC_TOOL_BASE + 0x10)
+//#define FEC_PRINT_TYPE            (FEC_TOOL_BASE + 0x8)
+//#define FEC_PRINT_ADDR            (FEC_TOOL_BASE + 0x10)
 #define FEC_LOAD_FILE_NAME          (FEC_TOOL_BASE + 0x18)
 #define FEC_LOAD_FILE_OFFSET        (FEC_TOOL_BASE + 0x20)
 #define FEC_LOAD_FILE_SIZE          (FEC_TOOL_BASE + 0x28)
@@ -1044,7 +1044,7 @@
 #define COMM_ADDR(i)                (COMM_BASE + 0x1000*i)
 #define BIF_COMM_BASE               (COMM_ADDR(0))
 #define SPI_COMM_BASE               (COMM_ADDR(0))
-//#define DISP_COMM_BASE(i)           (COMM_ADDR(4) + i*2*0x800)
+//#define DISP_COMM_BASE(i)         (COMM_ADDR(4) + i*2*0x800)
 #define DISP_COMM_BASE(i)           (COMM_ADDR(4) + i*0x1400)
 #define DMAC_COMM_BASE(i)           (COMM_ADDR(0) + i*0x800)
 #define SMC_COMM_BASE               (COMM_ADDR(0))

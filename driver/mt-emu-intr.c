@@ -93,7 +93,7 @@ static void pcie_bd_set_spi(struct emu_pcie *emu_pcie,unsigned int int_no) {
 
 static void pcie_cd_set_spi(struct emu_pcie *emu_pcie,unsigned int int_no) {
         if(*((unsigned short *)(host_cd_int_table + int_no)) != 0xffff) {
-		writel((1<<HOST<<16) | (2<<8) | 1, emu_pcie->region[0].vaddr + PH_CD_INTD_CFG_BASE + PH_REG_INTD_SPIC(*(host_cd_int_table+int_no)));
+			writel((1<<HOST<<16) | (2<<8) | 1, emu_pcie->region[0].vaddr + PH_CD_INTD_CFG_BASE + PH_REG_INTD_SPIC(*(host_cd_int_table+int_no)));
         }
 }
 
@@ -134,18 +134,18 @@ static void pcie_bd_intr_init(struct emu_pcie *emu_pcie) {
 
 static void pcie_cd_intr_init(struct emu_pcie *emu_pcie) {
 	int i;
-////intgrp mux
-//        set_cd_intmux_grp_en(emu_pcie,0x1f);
-//        set_cd_intmux_mux_en(emu_pcie,0, 0x01041041);
-//intd
-        for(i=12; i<20; i++)
-                pcie_cd_set_spi(emu_pcie,i);
+	////intgrp mux
+	//        set_cd_intmux_grp_en(emu_pcie,0x1f);
+	//        set_cd_intmux_mux_en(emu_pcie,0, 0x01041041);
+	//intd
+	for(i=12; i<20; i++)
+		pcie_cd_set_spi(emu_pcie,i);
 
-        for(i=48; i<57; i++)
-                pcie_cd_set_spi(emu_pcie,i);
+	for(i=48; i<57; i++)
+		pcie_cd_set_spi(emu_pcie,i);
 
-        for(i=69; i<85; i++)
-                pcie_cd_set_spi(emu_pcie,i);
+	for(i=69; i<85; i++)
+		pcie_cd_set_spi(emu_pcie,i);
 
 }
 
