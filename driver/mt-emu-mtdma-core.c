@@ -113,19 +113,19 @@ static int mtdma_v0_core_device_config(struct mtdma_chan *chan)
 
 
 
-static inline
+	static inline
 struct device *dchan2dev(struct dma_chan *dchan)
 {
 	return &dchan->dev->device;
 }
 
-static inline
+	static inline
 struct device *chan2dev(struct mtdma_chan *chan)
 {
 	return &chan->vc.chan.dev->device;
 }
 
-static inline
+	static inline
 struct mtdma_desc *vd2mtdma_desc(struct virt_dma_desc *vd)
 {
 	return container_of(vd, struct mtdma_desc, vd);
@@ -171,7 +171,7 @@ static struct mtdma_chunk *mtdma_alloc_chunk(struct mtdma_desc *desc)
 	 *  - Odd chunks originate CB equal to 0
 	 *  - Even chunks originate CB equal to 1
 	 */
-//	chunk->cb = !(desc->chunks_alloc % 2);
+	//	chunk->cb = !(desc->chunks_alloc % 2);
 	if (chan->dir == DMA_DEV_TO_MEM) {
 		chunk->ll_region.paddr = md->wr_chan[chan->id].info.ll_laddr;
 		chunk->ll_region.vaddr = md->wr_chan[chan->id].info.ll_vaddr;
@@ -277,7 +277,7 @@ static void mtdma_start_transfer(struct mtdma_chan *chan)
 		return;
 
 	child = list_first_entry_or_null(&desc->chunk->list,
-					 struct mtdma_chunk, list);
+			struct mtdma_chunk, list);
 	if (!child)
 		return;
 
@@ -290,7 +290,7 @@ static void mtdma_start_transfer(struct mtdma_chan *chan)
 }
 
 static int mtdma_device_config(struct dma_chan *dchan,
-				 struct dma_slave_config *config)
+		struct dma_slave_config *config)
 {
 	struct mtdma_chan *chan = dchan2mtdma_chan(dchan);
 
@@ -374,16 +374,16 @@ static void mtdma_device_issue_pending(struct dma_chan *dchan)
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
 	if (chan->configured && chan->request == MTDMA_REQ_NONE &&
-	    chan->status == MTDMA_ST_IDLE && vchan_issue_pending(&chan->vc)) {
+			chan->status == MTDMA_ST_IDLE && vchan_issue_pending(&chan->vc)) {
 		chan->status = MTDMA_ST_BUSY;
 		mtdma_start_transfer(chan);
 	}
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
 
-static enum dma_status
+	static enum dma_status
 mtdma_device_tx_status(struct dma_chan *dchan, dma_cookie_t cookie,
-			 struct dma_tx_state *txstate)
+		struct dma_tx_state *txstate)
 {
 	struct mtdma_chan *chan = dchan2mtdma_chan(dchan);
 	struct mtdma_desc *desc;
@@ -417,7 +417,7 @@ ret_residue:
 	return ret;
 }
 
-static struct dma_async_tx_descriptor *
+	static struct dma_async_tx_descriptor *
 mtdma_device_transfer(struct mtdma_transfer *xfer)
 {
 	struct mtdma_chan *chan = dchan2mtdma_chan(xfer->dchan);
@@ -490,11 +490,11 @@ err_alloc:
 	return NULL;
 }
 
-static struct dma_async_tx_descriptor *
+	static struct dma_async_tx_descriptor *
 mtdma_device_prep_slave_sg(struct dma_chan *dchan, struct scatterlist *sgl,
-			     unsigned int len,
-			     enum dma_transfer_direction direction,
-			     unsigned long flags, void *context)
+		unsigned int len,
+		enum dma_transfer_direction direction,
+		unsigned long flags, void *context)
 {
 	struct mtdma_transfer xfer;
 
@@ -671,8 +671,8 @@ static int mtdma_channel_setup(struct mtdma_chip *chip)
 		dma->device_alloc_chan_resources = mtdma_alloc_chan_resources;
 		dma->device_free_chan_resources = mtdma_free_chan_resources;
 		dma->device_config = mtdma_device_config;
-	//	dma->device_pause = mtdma_device_pause;
-	//	dma->device_resume = mtdma_device_resume;
+		//	dma->device_pause = mtdma_device_pause;
+		//	dma->device_resume = mtdma_device_resume;
 		dma->device_terminate_all = mtdma_device_terminate_all;
 		dma->device_issue_pending = mtdma_device_issue_pending;
 		dma->device_tx_status = mtdma_device_tx_status;
@@ -694,7 +694,7 @@ int mtdma_probe(struct mtdma_chip *chip)
 	struct mtdma *md;
 	int err;
 
-//	printk("mtdma_probe start\n");
+	//	printk("mtdma_probe start\n");
 	if (!chip)
 		return -EINVAL;
 
@@ -716,7 +716,7 @@ int mtdma_probe(struct mtdma_chip *chip)
 		return -EINVAL;
 
 	dev_vdbg(dev, "Channels:\twrite=%d, read=%d\n",
-		 md->wr_ch_cnt, md->rd_ch_cnt);
+			md->wr_ch_cnt, md->rd_ch_cnt);
 
 	snprintf(md->name, sizeof(md->name), "mtdma-core:%d", chip->id);
 
@@ -738,7 +738,7 @@ int mtdma_probe(struct mtdma_chip *chip)
 	/* Power management */
 	pm_runtime_enable(dev);
 
-      return 0;
+	return 0;
 
 err_irq_free:
 
@@ -761,14 +761,14 @@ int mtdma_remove(struct mtdma_chip *chip)
 	/* Deregister MTDMA device */
 	dma_async_device_unregister(&md->wr_mtdma);
 	list_for_each_entry_safe(chan, _chan, &md->wr_mtdma.channels,
-				 vc.chan.device_node) {
+			vc.chan.device_node) {
 		tasklet_kill(&chan->vc.task);
 		list_del(&chan->vc.chan.device_node);
 	}
 
 	dma_async_device_unregister(&md->rd_mtdma);
 	list_for_each_entry_safe(chan, _chan, &md->rd_mtdma.channels,
-				 vc.chan.device_node) {
+			vc.chan.device_node) {
 		tasklet_kill(&chan->vc.task);
 		list_del(&chan->vc.chan.device_node);
 	}

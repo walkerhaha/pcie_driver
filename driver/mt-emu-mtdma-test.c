@@ -59,7 +59,7 @@ int emu_mtdma_init(struct emu_mtdma *emu_mtdma, struct pci_dev *pcid, struct mtd
 	chip->dev = &pcid->dev;
 	chip->id = pcid->devfn;
 
-//	md->mf = mtdma_info->mf;
+	//	md->mf = mtdma_info->mf;
 	md->wr_ch_cnt = mtdma_info->wr_ch_cnt;
 	md->rd_ch_cnt = mtdma_info->rd_ch_cnt;
 
@@ -118,7 +118,7 @@ int emu_dma_rw(struct emu_mtdma *emu_mtdma, struct mtdma_rw* test_info, char __u
 	struct device *dev;
 	size_t sgs;
 	enum dma_transfer_direction dir;
-//	struct mtdma_chan *mtdma_chan;
+	//	struct mtdma_chan *mtdma_chan;
 	struct semaphore *sem;
 	struct completion *done;
 
@@ -136,7 +136,7 @@ int emu_dma_rw(struct emu_mtdma *emu_mtdma, struct mtdma_rw* test_info, char __u
 	dma_cap_zero(mask);
 	dma_cap_set(DMA_SLAVE, mask);
 
-//	mtdma_chan = dir == DMA_DEV_TO_MEM ? &emu_mtdma->mtdma_chip->md->wr_chan[test_info->ch] : &emu_mtdma->mtdma_chip->md->rd_chan[test_info->ch];
+	//	mtdma_chan = dir == DMA_DEV_TO_MEM ? &emu_mtdma->mtdma_chip->md->wr_chan[test_info->ch] : &emu_mtdma->mtdma_chip->md->rd_chan[test_info->ch];
 	sem = dir == DMA_DEV_TO_MEM ? &emu_mtdma->sem_wr[test_info->ch] : &emu_mtdma->sem_rd[test_info->ch];
 	done = dir == DMA_DEV_TO_MEM ? &emu_mtdma->done_wr[test_info->ch] : &emu_mtdma->done_rd[test_info->ch];
 
@@ -154,24 +154,24 @@ int emu_dma_rw(struct emu_mtdma *emu_mtdma, struct mtdma_rw* test_info, char __u
 	sgs = (offset_in_page(userbuf) + test_info->size + PAGE_SIZE-1) / PAGE_SIZE;
 	dma_pages = kmalloc(sgs * sizeof(struct page*), GFP_KERNEL);
 	if(!dma_pages)
-    {
-        ret = -ENOMEM;
-        goto release_channel;
-    }
+	{
+		ret = -ENOMEM;
+		goto release_channel;
+	}
 
 	ret = get_user_pages_fast( (unsigned long)userbuf, sgs, dir == DMA_DEV_TO_MEM, dma_pages);
 
-    if ( ret != sgs )
-    {
-        printk("get_user_pages_fast error\n");
-        goto release_page;
+	if ( ret != sgs )
+	{
+		printk("get_user_pages_fast error\n");
+		goto release_page;
 	}
 
 	ret = sg_alloc_table(&sgt, sgs, GFP_KERNEL);
 	if (ret)
 		goto release_page;
 
-    // Build sg.
+	// Build sg.
 	left_to_map = test_info->size;
 	for_each_sg( sgt.sgl, sg, sgs, i )
 	{
@@ -198,21 +198,21 @@ int emu_dma_rw(struct emu_mtdma *emu_mtdma, struct mtdma_rw* test_info, char __u
 		left_to_map -= len;
 	}
 
-    // Map the scatterlist 
+	// Map the scatterlist 
 
-    ret = dma_map_sg(dev, sgt.sgl, sgs, dir == DMA_DEV_TO_MEM ? DMA_FROM_DEVICE : DMA_TO_DEVICE);
+	ret = dma_map_sg(dev, sgt.sgl, sgs, dir == DMA_DEV_TO_MEM ? DMA_FROM_DEVICE : DMA_TO_DEVICE);
 
-    if ( ret != sgs )
-    {
-        printk( KERN_ERR KBUILD_MODNAME ": dma_map_sg() returned %d, expected %zx\n", ret, sgs);
-        goto release_table;
-    }
+	if ( ret != sgs )
+	{
+		printk( KERN_ERR KBUILD_MODNAME ": dma_map_sg() returned %d, expected %zx\n", ret, sgs);
+		goto release_table;
+	}
 
 
 
-    if ( down_interruptible(sem) ) {
+	if ( down_interruptible(sem) ) {
 		printk("down sem error\n");
-        ret = -ERESTARTSYS;
+		ret = -ERESTARTSYS;
 		goto release_map;
 	}
 
@@ -239,7 +239,7 @@ int emu_dma_rw(struct emu_mtdma *emu_mtdma, struct mtdma_rw* test_info, char __u
 		dmaengine_terminate_all(chan);
 	}
 
-    up(sem);
+	up(sem);
 
 
 
@@ -258,7 +258,7 @@ release_channel:
 
 out:
 
-    return ret;
+	return ret;
 }
 
 

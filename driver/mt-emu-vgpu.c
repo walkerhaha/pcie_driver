@@ -99,7 +99,7 @@ static struct attribute *emu_pcie_attrs[] =
 ATTRIBUTE_GROUPS(emu_pcie);
 
 static pci_ers_result_t emu_vgpu_error_detected(struct pci_dev *pdev,
-						pci_channel_state_t state)
+		pci_channel_state_t state)
 {
 	struct emu_pcie *emu_pcie = pci_get_drvdata(pdev);
 
@@ -142,9 +142,9 @@ static void emu_vgpu_error_resume(struct pci_dev *pdev)
 }
 
 static const struct pci_error_handlers emu_vgpu_err_handler = {
-    .error_detected = emu_vgpu_error_detected,
-    .slot_reset = emu_vgpu_slot_reset,
-    .resume     = emu_vgpu_error_resume,
+	.error_detected = emu_vgpu_error_detected,
+	.slot_reset = emu_vgpu_slot_reset,
+	.resume     = emu_vgpu_error_resume,
 };
 
 
@@ -218,8 +218,8 @@ static void build_dma_info(void __iomem *rg_vaddr, void __iomem *ll_vaddr, bool 
 
 		chan_info[0].rg_vaddr = rg_vaddr + (j == 0 ? VF_REG_BASE_MTDMA_WCH : VF_REG_BASE_MTDMA_RCH);
 
-//			pr_debug("chan_info vf(%d) wr(%d) ch %d: rg_vaddr=%px, ll_max=%x, ll_laddr=%llx, ll_vaddr=%px}\n", vf ? 1 : 0,
-//				j, i, chan_info[i].rg_vaddr, chan_info[i].ll_max, chan_info[i].ll_laddr, chan_info[i].ll_vaddr);
+		//			pr_debug("chan_info vf(%d) wr(%d) ch %d: rg_vaddr=%px, ll_max=%x, ll_laddr=%llx, ll_vaddr=%px}\n", vf ? 1 : 0,
+		//				j, i, chan_info[i].rg_vaddr, chan_info[i].ll_max, chan_info[i].ll_laddr, chan_info[i].ll_vaddr);
 	}
 }
 
@@ -250,30 +250,30 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	}
 
 	pci_set_master(pcid);
-// kangjian
-//	/* DMA configuration */
-//	err = pci_set_dma_mask(pcid, DMA_BIT_MASK(64));
-//	if (!err) {
-//		err = pci_set_consistent_dma_mask(pcid, DMA_BIT_MASK(64));
-//		if (err) {
-//			pci_err(pcid, "consistent DMA mask 64 set failed\n");
-//			return err;
-//		}
-//	} else {
-//		pci_err(pcid, "DMA mask 64 set failed\n");
-//
-//		err = pci_set_dma_mask(pcid, DMA_BIT_MASK(32));
-//		if (err) {
-//			pci_err(pcid, "DMA mask 32 set failed\n");
-//			return err;
-//		}
-//
-//		err = pci_set_consistent_dma_mask(pcid, DMA_BIT_MASK(32));
-//		if (err) {
-//			pci_err(pcid, "consistent DMA mask 32 set failed\n");
-//			return err;
-//		}
-//	}
+	// kangjian
+	//	/* DMA configuration */
+	//	err = pci_set_dma_mask(pcid, DMA_BIT_MASK(64));
+	//	if (!err) {
+	//		err = pci_set_consistent_dma_mask(pcid, DMA_BIT_MASK(64));
+	//		if (err) {
+	//			pci_err(pcid, "consistent DMA mask 64 set failed\n");
+	//			return err;
+	//		}
+	//	} else {
+	//		pci_err(pcid, "DMA mask 64 set failed\n");
+	//
+	//		err = pci_set_dma_mask(pcid, DMA_BIT_MASK(32));
+	//		if (err) {
+	//			pci_err(pcid, "DMA mask 32 set failed\n");
+	//			return err;
+	//		}
+	//
+	//		err = pci_set_consistent_dma_mask(pcid, DMA_BIT_MASK(32));
+	//		if (err) {
+	//			pci_err(pcid, "consistent DMA mask 32 set failed\n");
+	//			return err;
+	//		}
+	//	}
 
 	/* Data structure allocation */
 	emu_pcie = devm_kzalloc(dev, sizeof(*emu_pcie), GFP_KERNEL);
@@ -298,7 +298,7 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 		emu_pcie->region[i].size = pci_resource_len(pcid, i);
 		if(emu_pcie->region[i].size != 0) {
 			dev_info(&pcid->dev, "pcie region%d paddr:0x%llx size:0x%llx vaddr:0x%llx ",
-				i, emu_pcie->region[i].paddr, emu_pcie->region[i].size, (u64)emu_pcie->region[i].vaddr);
+					i, emu_pcie->region[i].paddr, emu_pcie->region[i].size, (u64)emu_pcie->region[i].vaddr);
 		}
 	}
 
@@ -306,7 +306,7 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 
 	//ret = irq_init(emu_pcie, PCI_IRQ_MSI, 0);
 	ret = irq_init(emu_pcie, IRQ_MSIX, 0);
-	
+
 	if (ret) {
 		dev_err(&pcid->dev, "irq_init failed\n");
 		goto error;
@@ -338,7 +338,7 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 
 	/* Starting MTDMA driver */
 	if( 0 != emu_mtdma_init(&emu_pcie->emu_mtdma, pcid, &dma_info))
-    	{
+	{
 		pr_err("emu_mtdma_init failed\n");
 		emu_pcie->emu_mtdma.mtdma_chip = NULL;
 		goto error;
@@ -354,7 +354,7 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	pr_info("MTDMA probe succes\n");
 
 	dev_info(&pcid->dev, "Probe success\n");
-    
+
 
 	return 0;
 error:
@@ -366,7 +366,7 @@ error:
 static void pcie_emu_vgpu_remove(struct pci_dev *pcid)
 {
 	pcie_emu_vgpu_free(pcid);
-	
+
 	dev_notice(&pcid->dev, "Removed %04X:%04X\n", pcid->vendor, pcid->device);
 }
 
