@@ -88,14 +88,14 @@ static DEVICE_ATTR(bar2, S_IRUGO, show_bar2, NULL);
 
 static ssize_t show_bar4(struct device *dev, struct device_attribute *attr, char *buf)
 {
-        return show_bar(dev, attr, buf, 4);
+	return show_bar(dev, attr, buf, 4);
 }
 
 static DEVICE_ATTR(bar4, S_IRUGO, show_bar4, NULL);
 
 static ssize_t show_bar6(struct device *dev, struct device_attribute *attr, char *buf)
 {
-        return show_bar(dev, attr, buf, 6);
+	return show_bar(dev, attr, buf, 6);
 }
 
 static DEVICE_ATTR(bar6, S_IRUGO, show_bar6, NULL);
@@ -129,10 +129,10 @@ static u16 mt_pci_find_vsec_capability(struct pci_dev *dev, u16 vendor, int cap)
 		return 0;
 
 	while ((vsec = pci_find_next_ext_capability(dev, vsec,
-						     PCI_EXT_CAP_ID_VNDR))) {
+					PCI_EXT_CAP_ID_VNDR))) {
 		if (pci_read_config_dword(dev, vsec + PCI_VNDR_HEADER,
-					  &header) == PCIBIOS_SUCCESSFUL &&
-		    PCI_VNDR_HEADER_ID(header) == cap)
+					&header) == PCIBIOS_SUCCESSFUL &&
+				PCI_VNDR_HEADER_ID(header) == cap)
 			return vsec;
 	}
 
@@ -180,9 +180,9 @@ static void mt_emu_vf_enable(struct emu_pcie *emu_pcie, int num) {
 
 	emu_pcie->vf_num = num;
 
-//	for(i=0; i<emu_pcie->vf_num; i++) {
-//		sreg_u32(PCIE_SS_CFG_VF_DMA_BASE + i*4, MT_DMA_RCH_BASE(PCIE_DMA_IDX, i + (PCIE_DMA_CH_NUM - emu_pcie->vf_num))); 
-//	}
+	//	for(i=0; i<emu_pcie->vf_num; i++) {
+	//		sreg_u32(PCIE_SS_CFG_VF_DMA_BASE + i*4, MT_DMA_RCH_BASE(PCIE_DMA_IDX, i + (PCIE_DMA_CH_NUM - emu_pcie->vf_num))); 
+	//	}
 }
 
 static inline int pci_rebar_bytes_to_size1(u64 bytes)
@@ -614,16 +614,16 @@ static pci_ers_result_t emu_gpu_error_detected(struct pci_dev *pdev,
 	 * after the slot reset through driver's slot_reset callback.
 	 */
 	switch (state) {
-	case pci_channel_io_normal:
-		dev_warn(&emu_pcie->pcid->dev, "GPU AER recovery\n");
-		return PCI_ERS_RESULT_CAN_RECOVER;
-	case pci_channel_io_frozen:
-		dev_warn(&emu_pcie->pcid->dev, "GPU AER frozen\n");
-		pci_save_state(pdev);
-		return PCI_ERS_RESULT_NEED_RESET;
-	case pci_channel_io_perm_failure:
-		dev_warn(&emu_pcie->pcid->dev, "GPU AER failure\n");
-		return PCI_ERS_RESULT_DISCONNECT;
+		case pci_channel_io_normal:
+			dev_warn(&emu_pcie->pcid->dev, "GPU AER recovery\n");
+			return PCI_ERS_RESULT_CAN_RECOVER;
+		case pci_channel_io_frozen:
+			dev_warn(&emu_pcie->pcid->dev, "GPU AER frozen\n");
+			pci_save_state(pdev);
+			return PCI_ERS_RESULT_NEED_RESET;
+		case pci_channel_io_perm_failure:
+			dev_warn(&emu_pcie->pcid->dev, "GPU AER failure\n");
+			return PCI_ERS_RESULT_DISCONNECT;
 	}
 	return PCI_ERS_RESULT_NEED_RESET;
 }
@@ -653,7 +653,7 @@ static const struct pci_error_handlers emu_gpu_err_handler = {
 
 static const struct pci_device_id pcie_emu_gpu_ids[] = {
 
-	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_HS_GPU) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_LS_GPU) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, pcie_emu_gpu_ids);
