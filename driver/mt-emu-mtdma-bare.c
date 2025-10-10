@@ -140,9 +140,7 @@ void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 
 int dma_bare_isr(struct dma_bare_ch *bare_ch) {
 	u32 val;
-	printk("int ch num: %d\n", bare_ch);
 	val = GET_CH_32(bare_ch, REG_DMA_CH_INTR_RAW);
-	printk("dma ch %d val\n", val);
 
 	if(val & DMA_CH_INTR_BIT_DONE) {
 		bare_ch->int_error = 0;

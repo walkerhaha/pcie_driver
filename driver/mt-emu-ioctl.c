@@ -605,9 +605,9 @@ void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 	dev_info(&emu_pcie->pcid->dev, "enter dma isr, src=%d\n",src);
 	struct dma_bare_ch *bare_ch;
 
-
 	/*fouce isr type*/
 	if (src==0) {
+		pr_info("isr debug info %s %d\n", __func__, __LINE__);
 		uint32_t rdata=0;
 		rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS);
 		if((rdata&0x1)==1){
@@ -619,6 +619,7 @@ void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 
 	if (src==1) {
 		uint32_t rdata=0;
+		pr_info("isr debug info %s %d\n", __func__, __LINE__);
 		rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800);
 		if((rdata&0x1)==1){
 			printk("dma wr channel 0 done\n");
@@ -869,6 +870,7 @@ void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 	printk("gpu start dma_bare ch%d \n", &emu_pcie->dma_bare.rd_ch[0]);
 	dev_info(&emu_pcie->pcid->dev,"received gpu intr %d\n",irq);
 	if(emu_pcie->irq_test_mode) {
+		pr_info("%s %d, irq_test_mode\n");
 		uint32_t rdata = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		if((0x1&rdata)==0x1) {
 			writel(0xfffffffe&rdata, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
@@ -911,12 +913,12 @@ void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 
 		complete(&emu_pcie->int_done[irq]);
 	}else {
+		pr_info("%s %d,not irq_test_mode irq :%d\n", irq);
 		uint32_t int_reg = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		writel(0x10000|int_reg, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		//readl(emu_pcie->region[0].vaddr + 0x681800+irq*4);
 
 		uint32_t claim = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_CLAIM(irq));
-		//claim = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_CLAIM(irq));
 		uint32_t src   = claim&0x1ff;
 		emu_dma_isr(emu_pcie, src);
 
