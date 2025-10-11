@@ -100,20 +100,22 @@ static void pcie_qy_free(struct pci_dev *pcid)
 }
 
 
-static int pcie_qy_probe(struct pci_dev *pcid, const struct pci_device_id *ent)
+static int pcie_apu_probe(struct pci_dev *pcid, const struct pci_device_id *ent)
 {
 	struct emu_pcie *emu_pcie;
 	int ret;
 	int i = 0;
 
 	dev_info(&pcid->dev, "Probing  %04X:%04X\n", pcid->vendor, pcid->device);
-
+	
+	/* Enable PCI device */
 	ret = pci_enable_device(pcid);
 	if (ret) {
 		dev_err(&pcid->dev, "pci_enable_device %d\n", ret);
 		goto error;
 	}
 
+	/* Mapping PCI BAR regions */
 	ret = pcim_iomap_regions(pcid, BIT(BAR_0) | BIT(BAR_2), pci_name(pcid));
 	if (ret) {
 		dev_err(&pcid->dev, "pcim_iomap_regions %d\n", ret);
@@ -185,7 +187,7 @@ error:
 	return ret;
 }
 
-static void pcie_qy_remove(struct pci_dev *pcid)
+static void pcie_apu_remove(struct pci_dev *pcid)
 {
 	pcie_qy_free(pcid);
 	
@@ -240,17 +242,17 @@ static const struct pci_error_handlers emu_apu_err_handler = {
     .resume     = emu_apu_error_resume,
 };
 
-static const struct pci_device_id pcie_qy_ids[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_QY2_APU) },
+static const struct pci_device_id pcie_ls_ids[] = {
+	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_LS_APU) },
 	{ }
 };
-MODULE_DEVICE_TABLE(pci, pcie_qy_ids);
+MODULE_DEVICE_TABLE(pci, pcie_ls_ids);
 
 static struct pci_driver pcie_qy_driver = {
 	.name = KBUILD_MODNAME,
-	.probe = pcie_qy_probe,
-	.remove = pcie_qy_remove,
-	.id_table = pcie_qy_ids,
+	.probe = pcie_apu_probe,
+	.remove = pcie_apu_remove,
+	.id_table = pcie_ls_ids,
 //`	.sriov_configure = pci_sriov_configure_simple,
 	.err_handler    = &emu_apu_err_handler
 };

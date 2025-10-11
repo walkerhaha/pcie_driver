@@ -18,7 +18,8 @@
 #define PCI_DEVICE_ID_MT_HS_GPU      (0x0680)
 #define PCI_DEVICE_ID_MT_HS_VGPU     (0x068a)
 #define PCI_DEVICE_ID_MT_LS_GPU      (0x0610)
-
+#define PCI_DEVICE_ID_MT_LS_APU      (0x06ff)
+#define PCI_DEVICE_ID_MT_LS_VGPU     (0x061A)
 #define MT_GPU_NAME                 "mt_emu_gpu"
 #define MT_APU_NAME                 "mt_emu_apu"
 #define MT_VGPU_NAME                "mt_emu_vgpu"
