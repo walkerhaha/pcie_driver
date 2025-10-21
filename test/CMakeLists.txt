@@ -56,7 +56,7 @@ target_include_directories(shell PUBLIC
 target_link_libraries(shell mlib ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties(shell PROPERTIES LINK_FLAGS "-T ../shell/shell.lds")
 
-file(GLOB TEST_SOURCES test/*.cc)
+file(GLOB TEST_SOURCES src/*.cc)
 add_executable(test ${TEST_SOURCES})
 target_link_libraries(test mlib ${CMAKE_THREAD_LIBS_INIT})
 
