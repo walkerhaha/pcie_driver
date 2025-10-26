@@ -336,7 +336,7 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	build_vf_dma_info(emu_pcie->region[BAR_0].vaddr, emu_pcie->region[BAR_2].vaddr, &dma_info);
 	mtdma_bare_init(&emu_pcie->dma_bare, &dma_info);
 
-	/* Starting MTDMA driver */
+	/* 
 	if( 0 != emu_mtdma_init(&emu_pcie->emu_mtdma, pcid, &dma_info))
 	{
 		pr_err("emu_mtdma_init failed\n");
@@ -344,14 +344,14 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 		goto error;
 	}
 
-	/* Starting MTDMA driver */
+	
 	ret = mtdma_probe(emu_pcie->emu_mtdma.mtdma_chip);
 	if (ret) {
 		emu_pcie->emu_mtdma.mtdma_chip = NULL; //devm automatic free
 		pr_err("MTDMA probe failed\n");
 		goto error;
 	}
-	pr_info("MTDMA probe succes\n");
+	pr_info("MTDMA probe succes\n");*/
 
 	dev_info(&pcid->dev, "Probe success\n");
 
@@ -371,7 +371,7 @@ static void pcie_emu_vgpu_remove(struct pci_dev *pcid)
 }
 
 static const struct pci_device_id pcie_emu_vgpu_id_table[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_PH1S_VGPU) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_LS_VGPU) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, pcie_emu_vgpu_id_table);
