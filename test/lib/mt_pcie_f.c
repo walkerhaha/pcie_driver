@@ -688,7 +688,7 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
         return -1;
 
     ch_bak = ch_num;
-    printf(" dma_bare check = fun %0x, ch %0x \n", fun, ch_num);
+    printf(" dma_bare check = fun %d, ch %d \n", fun, ch_num);
 
 	int vf = (VF_NUM==0) ? 0 : 1;
     printf(" vf all = fun %0x", vf); 
@@ -706,8 +706,9 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
         	fun = F_GPU;
     	}
     	else {
-        	fun = ch_num;
+        	//fun = ch_num;
         	//ch_num = 0;
+        	fun = F_GPU;
     	}
 	} 
     else {
@@ -716,7 +717,7 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 		}
 	}
 
-    printf(" dma_bare after change check = fun %0x, ch %0x \n", fun, ch_num);
+    printf(" dma_bare after change check = fun %d, ch %d \n", fun, ch_num);
 
     pcief_dmaisr_set(fun, 1);
 
