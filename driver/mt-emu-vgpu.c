@@ -41,6 +41,8 @@
 
 #include <linux/iommu.h>
 
+// 为mt_emu_vgpu规划的静态次设备号起始值（确保未被占用）
+#define VGPU_STATIC_MINOR_START 100
 
 static const struct file_operations mt_test_fops = {
 	.owner = THIS_MODULE,
@@ -315,7 +317,9 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	dev_notice(&pcid->dev, "Added %04X:%04X\n", pcid->vendor, pcid->device);
 
 	sprintf(misc_dev_name, MT_VGPU_NAME "%d", pcid->devfn);
-	emu_pcie->miscdev.minor = MISC_DYNAMIC_MINOR;
+
+	emu_pcie->miscdev.minor = VGPU_STATIC_MINOR_START + pcid->devfn;
+	//emu_pcie->miscdev.minor = MISC_DYNAMIC_MINOR;
 	//if(pcid->devfn<52)
 	//emu_pcie->miscdev.minor = pcid->devfn;
 	//else
@@ -325,33 +329,35 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	emu_pcie->miscdev.fops = &mt_test_fops;
 	emu_pcie->miscdev.parent = &pcid->dev;
 	emu_pcie->miscdev.groups = emu_pcie_groups;
-	dev_info(&pcid->dev, "misc_register %s\n", emu_pcie->miscdev.name);
+	//dev_info(&pcid->dev, "misc_register %s\n", emu_pcie->miscdev.name);
+	dev_info(&pcid->dev, "misc_register %s, static minor=%d\n", emu_pcie->miscdev.name, emu_pcie->miscdev.minor);
 
 	ret = misc_register(&emu_pcie->miscdev);
 	if (ret) {
-		dev_err(&pcid->dev, "Unable to register misc device\n");
-		goto error;
+    	dev_err(&pcid->dev, "Unable to register misc device, minor=%d, ret=%d\n",
+            emu_pcie->miscdev.minor, ret); 
+    	goto error;
 	}
 
 	build_vf_dma_info(emu_pcie->region[BAR_0].vaddr, emu_pcie->region[BAR_2].vaddr, &dma_info);
 	mtdma_bare_init(&emu_pcie->dma_bare, &dma_info);
 
-	/* Starting MTDMA driver */
-	if( 0 != emu_mtdma_init(&emu_pcie->emu_mtdma, pcid, &dma_info))
+	
+	/*if( 0 != emu_mtdma_init(&emu_pcie->emu_mtdma, pcid, &dma_info))
 	{
 		pr_err("emu_mtdma_init failed\n");
 		emu_pcie->emu_mtdma.mtdma_chip = NULL;
 		goto error;
 	}
 
-	/* Starting MTDMA driver */
+
 	ret = mtdma_probe(emu_pcie->emu_mtdma.mtdma_chip);
 	if (ret) {
 		emu_pcie->emu_mtdma.mtdma_chip = NULL; //devm automatic free
 		pr_err("MTDMA probe failed\n");
 		goto error;
 	}
-	pr_info("MTDMA probe succes\n");
+	pr_info("MTDMA probe succes\n");*/
 
 	dev_info(&pcid->dev, "Probe success\n");
 
@@ -371,7 +377,7 @@ static void pcie_emu_vgpu_remove(struct pci_dev *pcid)
 }
 
 static const struct pci_device_id pcie_emu_vgpu_id_table[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_PH1S_VGPU) },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MT, PCI_DEVICE_ID_MT_LS_VGPU) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, pcie_emu_vgpu_id_table);
