@@ -350,7 +350,6 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 		goto error;
 	}
 
-
 	ret = mtdma_probe(emu_pcie->emu_mtdma.mtdma_chip);
 	if (ret) {
 		emu_pcie->emu_mtdma.mtdma_chip = NULL; //devm automatic free
