@@ -603,8 +603,18 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 {
 	struct dma_bare_ch *bare_ch;
-	unsigned char ch = src / 2;
-	unsigned char wr = src % 2;
+	unsigned char ch = 0;
+	unsigned char wr = 0;
+
+	if (src >= 0 && src < 60) {
+		wr = 1;
+		ch = src;
+	} else if (src >= 60 && src < 120) {
+		wr = 0;
+		ch = src - 60;
+	} else {
+		pr_info("emu dma isr unknow int src :0x%x\n", src);
+	}
 
 	dev_info(&emu_pcie->pcid->dev, "enter dma isr, src=%d, ch :%d wr :%d\n",src, ch, wr);
 	/*fouce isr type*/
