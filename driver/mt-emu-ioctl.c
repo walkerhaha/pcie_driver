@@ -879,9 +879,15 @@ void pcie_apu_th(int irq, struct emu_pcie *emu_pcie)
 
 void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 {
-	printk("pgu start dma_bare %d \n", &emu_pcie->dma_bare);
-	printk("gpu start dma_bare ch%d \n", &emu_pcie->dma_bare.rd_ch[0]);
+	uint32_t msk = 0;
+	uint32_t target_msk = 0;
+
+	msk = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_MASK(irq));
+	target_msk  = msk | (1 << 16);
+	writel(target_msk, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_MASK(irq));
+	target_msk = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_MASK(irq));
 	dev_info(&emu_pcie->pcid->dev,"received gpu intr %d\n",irq);
+
 	if(emu_pcie->irq_test_mode) {
 		pr_info("%s %d, irq_test_mode\n");
 		uint32_t rdata = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
@@ -939,6 +945,11 @@ void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 		readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		//complete(&emu_pcie->int_done[irq]);
 	}
+
+	target_msk  = msk & ~(1 << 16);
+	writel(target_msk, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_MASK(irq));
+	target_msk = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_MASK(irq));
+
 }
 
 
