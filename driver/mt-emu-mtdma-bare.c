@@ -237,18 +237,18 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		case DMA_MEM_TO_MEM:
 			direction |= DMA_CH_EN_BIT_NOCROSS;
 			direction |= DMA_CH_EN_BIT_DUMMY;
-			printk("DMA_MEM_TO_MEM direction %d\n",direction);	
+			pr_info("DMA_MEM_TO_MEM direction %d\n",direction);
 			break;
 		case DMA_MEM_TO_DEV:
-			printk("DMA_MEM_TO_DEV direction %d\n",direction);	
+			pr_info("DMA_MEM_TO_DEV direction %d\n",direction);
 			break;
 		case DMA_DEV_TO_MEM:
 			direction |= DMA_CH_EN_BIT_DUMMY;
-			printk("DMA_DEV_TO_MEM direction %d\n",direction);	
+			pr_info("DMA_DEV_TO_MEM direction %d\n",direction);
 			break;
 		case DMA_DEV_TO_DEV:
 			direction |= DMA_CH_EN_BIT_NOCROSS;
-			printk("DMA_DEV_TO_DEV direction %d\n",direction);	
+			pr_info("DMA_DEV_TO_DEV direction %d\n",direction);
 			break;
 		default:
 			return -1;
@@ -276,6 +276,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 			SET_CH_32(bare_ch, REG_DMA_CH_LBAR_BASIC,ch_lbar_basic);
 		}
 #if (MTDMA_MMU==1)
+		pr_info("mtdma mmu enable in driver\n");
 		SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, 0x101);
 #endif
 		SET_LL_32(lli, cnt, cnt-1);
@@ -608,7 +609,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 
 						printk("dummy addr H:%x\n",dummy_addr_H);
 						printk("dummy addr L:%x\n",dummy_addr_L);
-					}				
+					}
 					kfree(desc_size);
 				}
 			}
@@ -616,22 +617,23 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		int int_mask = 0;
 		SET_CH_32(bare_ch, REG_DMA_CH_INTR_IMSK, 0);
 		SET_CH_32(bare_ch, REG_DMA_CH_DIRECTION, direction);
-		SET_CH_32(bare_ch, REG_DMA_CH_ENABLE, ch_en);	
-		
+		SET_CH_32(bare_ch, REG_DMA_CH_ENABLE, ch_en);
+
 		int_mask = GET_CH_32(bare_ch, REG_DMA_CH_INTR_IMSK);
-		printk("xfer ch num: %d, int_mask :0x%x\n", bare_ch, int_mask);
+		printk("mtmda channel :%d int_mask: 0x%x\n", bare_ch->chan_id, int_mask);
+		/*
 		printk("print struct thing \n");
 		printk(KERN_INFO "emu_pcie information:\n");
 		printk(KERN_INFO "1: %x\n", bare_ch->info);
 		printk(KERN_INFO "2: %x\n", bare_ch->int_done);
 		printk(KERN_INFO "3: %x\n", bare_ch->int_mutex);
 		printk(KERN_INFO "4: %x\n", bare_ch->int_error);
-		printk("mtdma wait int\n");
-
+		*/
+		printk("mtdma channel %d wait interrupt\n", bare_ch->chan_id);
 		ret = wait_for_completion_timeout(&bare_ch->int_done, msecs_to_jiffies(timeout_ms));
-		printk("xfer1 ch num: %d\n", bare_ch);	
+		//printk("xfer1 ch num: %d\n", bare_ch);
 		if(!ret) {
-			pr_debug("wait dma int timeout%d\n");
+			pr_debug("wait interrupt timeout%d\n");
 			//dma_desc_dump(bare_ch, lli_rw, desc_cnt);
 		}
 		mutex_unlock(&bare_ch->int_mutex);

@@ -57,6 +57,7 @@ struct dma_bare_ch {
 	struct completion      int_done;
 	struct mutex           int_mutex;
 	u8                     int_error;
+	u32                    chan_id;
 };
 
 struct dma_bare {

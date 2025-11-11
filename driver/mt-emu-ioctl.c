@@ -525,9 +525,11 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					printk("threads start ch num: %d\n", bare_ch);
 					printk("threads start channel1 %d\n", &emu_pcie->dma_bare.rd_ch[1]);	
 				}
-				else 
+				else
 					bare_ch = &emu_pcie->dma_bare.wr_ch[test_info.ch_num];
 
+				bare_ch->chan_id = test_info.ch_num;
+				/*
 				printk(KERN_INFO "1: %x\n", bare_ch->info);
 				printk(KERN_INFO "2: %x\n", bare_ch->int_done);
 				printk(KERN_INFO "3: %x\n", bare_ch->int_mutex);
@@ -537,14 +539,12 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				printk(KERN_INFO "6: %x\n", test_info.timeout_ms);
 				printk(KERN_INFO "7: %x\n", test_info.block_cnt);
 				printk(KERN_INFO "8: %x\n", test_info.data_direction);
-
+				*/
 				emu_param.b0 = dma_bare_xfer(bare_ch, test_info.data_direction, test_info.desc_direction, test_info.desc_cnt, test_info.block_cnt, test_info.sar, test_info.dar, test_info.size, test_info.ch_num, test_info.timeout_ms);
-
-				printk(KERN_INFO "ioctrl end: \n");
 
 				ret = copy_to_user((void __user *)arg, &emu_param, sizeof(emu_param));
 
-				printk(KERN_INFO "ioctrl ret end: \n");
+				pr_info("ioctl end\n");
 
 			}
 			break;
@@ -889,7 +889,7 @@ void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 	dev_info(&emu_pcie->pcid->dev,"received gpu intr %d\n",irq);
 
 	if(emu_pcie->irq_test_mode) {
-		pr_info("%s %d, irq_test_mode\n");
+		pr_info("mtdma is in irq_test_mode\n");
 		uint32_t rdata = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		if((0x1&rdata)==0x1) {
 			writel(0xfffffffe&rdata, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
@@ -932,7 +932,7 @@ void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 
 		complete(&emu_pcie->int_done[irq]);
 	}else {
-		pr_info("%s %d,not in irq_test_mode irq :%d\n", irq);
+		pr_info("mtdma is not in irq_test_mode irq :%d\n", irq);
 		uint32_t int_reg = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		writel(0x10000|int_reg, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		//readl(emu_pcie->region[0].vaddr + 0x681800+irq*4);
@@ -943,7 +943,6 @@ void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 
 		writel(int_reg, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
-		//complete(&emu_pcie->int_done[irq]);
 	}
 
 	target_msk  = msk & ~(1 << 16);
