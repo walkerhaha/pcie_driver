@@ -522,8 +522,7 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 				if(test_info.data_direction == DMA_MEM_TO_MEM || test_info.data_direction == DMA_MEM_TO_DEV) {
 					bare_ch = &emu_pcie->dma_bare.rd_ch[test_info.ch_num];
-					printk("threads start ch num: %d\n", bare_ch);
-					printk("threads start channel1 %d\n", &emu_pcie->dma_bare.rd_ch[1]);	
+					pr_info("threads start ch num: %d\n", test_info.ch_num);
 				}
 				else
 					bare_ch = &emu_pcie->dma_bare.wr_ch[test_info.ch_num];

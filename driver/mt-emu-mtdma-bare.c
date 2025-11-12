@@ -270,6 +270,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 	if(desc_cnt==0) {
 		u32 cnt = size;
 
+		pr_info("mtdma use single mode\n");
 		if(i==0) {
 			lli = bare_ch->info.rg_vaddr + REG_DMA_CH_DESC_OPT;
 			u32 ch_lbar_basic = (desc_cnt<<16) | chain_en;
@@ -278,6 +279,8 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 #if (MTDMA_MMU==1)
 		pr_info("mtdma mmu enable in driver\n");
 		SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, 0x101);
+#else
+		pr_info("mtdma mmu disable in driver\n");
 #endif
 		SET_LL_32(lli, cnt, cnt-1);
 		SET_LL_32(lli, sar.lsb, lower_32_bits(sar));
@@ -305,6 +308,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 
 	/////////////////--------chain task-------//////////////////////
 	else {
+		pr_info("mtdma use chain mode\n");
 		if(block_cnt==0) {
 			u32 desc_cnt_tmp;
 			void* desc_size;
@@ -405,6 +409,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 
 		/////////////////--------block type-------//////////////////////
 		else {
+			pr_info("mtdma use block mode\n");
 			for(j=0; j<block_cnt; j++) {
 				u32 desc_cnt_tmp;
 				void* desc_size;
@@ -517,7 +522,6 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 						elm_cnt = size_tmp/desc_cnt_tmp;
 						sar_tmp = sar+j*size;
 						dar_tmp = dar+j*size;
-
 						for(i=0; i<desc_cnt_tmp; i++) {
 							u64 lar;
 							u32 cnt;
