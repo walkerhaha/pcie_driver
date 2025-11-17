@@ -1,4 +1,5 @@
 #include <linux/module.h>
+#include <linux/slab.h>
 
 MODULE_DESCRIPTION("MT EMU qy PCIe Test Linux Driver");
 
@@ -221,7 +222,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 
 	sar_tmp = sar;
 	dar_tmp = dar;
-
+	pr_info("sar: 0x%llx dar: 0x%llx\n", sar, dar);
 	//00:H2D(cross and no dummy read)  
 	//01:H2H(no cross no dummy read) 
 	//10:H2D(cross no dummy read) 
@@ -312,8 +313,10 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		if(block_cnt==0) {
 			u32 desc_cnt_tmp;
 			void* desc_size;
-			desc_size = kmalloc(100000, GFP_KERNEL);
-			if(desc_size==NULL)
+		
+			pr_info("Max kmalloc size: 0x%x bytes\n", KMALLOC_MAX_SIZE);
+			desc_size = kmalloc(1024 * 1024 * 2, GFP_KERNEL);
+			if(!desc_size)
 				printk("desc_size kmalloc failed\n");
 			if(rand_flag==1) {
 				size_tmp = size;
@@ -341,6 +344,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 			sar_tmp = sar;
 			dar_tmp = dar;
 
+			pr_info("data size: 0x%x elm_cnt: %d\n", size, elm_cnt);
 			for(i=0; i<=desc_cnt_tmp; i++) {
 				u64 lar;
 				u32 cnt;
@@ -351,6 +355,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 				else {
 					cnt = (i==desc_cnt_tmp) ? size_tmp : elm_cnt;
 				}
+				pr_info("desc_cnt_tmp: %d size: 0x%x elm_cnt: %d\n", i, size, elm_cnt);
 
 				if(i==0) {
 #if (MTDMA_MMU==1)
@@ -633,11 +638,12 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		printk(KERN_INFO "3: %x\n", bare_ch->int_mutex);
 		printk(KERN_INFO "4: %x\n", bare_ch->int_error);
 		*/
-		printk("mtdma channel %d wait interrupt\n", bare_ch->chan_id);
+		timeout_ms = 100000;
+		printk("mtdma channel %d wait interrupt time out :%d\n", bare_ch->chan_id, timeout_ms);
 		ret = wait_for_completion_timeout(&bare_ch->int_done, msecs_to_jiffies(timeout_ms));
 		//printk("xfer1 ch num: %d\n", bare_ch);
 		if(!ret) {
-			pr_debug("wait interrupt timeout%d\n");
+			pr_debug("wait interrupt timeout: %d\n", timeout_ms);
 			//dma_desc_dump(bare_ch, lli_rw, desc_cnt);
 		}
 		mutex_unlock(&bare_ch->int_mutex);
