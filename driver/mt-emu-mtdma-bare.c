@@ -315,7 +315,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 			void* desc_size;
 		
 			pr_info("Max kmalloc size: 0x%x bytes\n", KMALLOC_MAX_SIZE);
-			desc_size = kmalloc(1024 * 1024 * 2, GFP_KERNEL);
+			desc_size = kmalloc(1024 * 1024 * 3, GFP_KERNEL);
 			if(!desc_size)
 				printk("desc_size kmalloc failed\n");
 			if(rand_flag==1) {
@@ -355,8 +355,10 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 				else {
 					cnt = (i==desc_cnt_tmp) ? size_tmp : elm_cnt;
 				}
-				pr_info("desc_cnt_tmp: %d size: 0x%x elm_cnt: %d\n", i, size, elm_cnt);
-
+				
+				if ( (i % 500)== 0) {
+					pr_info("desc cnt :%d\n", i);	
+				}
 				if(i==0) {
 #if (MTDMA_MMU==1)
 					SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, 0x101);
@@ -402,6 +404,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 
 			}
 
+			pr_info("desc cnt i: %d\n", i);	
 			if( direction > 3) {
 				dummy_addr_H = GET_CH_32(bare_ch, REG_DUMMY_CH_ADDR_H);
 				dummy_addr_L = GET_CH_32(bare_ch, REG_DUMMY_CH_ADDR_L);	
@@ -638,7 +641,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		printk(KERN_INFO "3: %x\n", bare_ch->int_mutex);
 		printk(KERN_INFO "4: %x\n", bare_ch->int_error);
 		*/
-		timeout_ms = 100000;
+		timeout_ms = 10000000;
 		printk("mtdma channel %d wait interrupt time out :%d\n", bare_ch->chan_id, timeout_ms);
 		ret = wait_for_completion_timeout(&bare_ch->int_done, msecs_to_jiffies(timeout_ms));
 		//printk("xfer1 ch num: %d\n", bare_ch);

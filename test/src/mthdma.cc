@@ -209,15 +209,17 @@ TEST_CASE("sanity_dma_bare_chain_ddr", "[mtdma1]") {
 
 	LInfo("TEST_CASE sanity_dma_bare_chain_ddr init\n");
 
+	uint32_t des_cnt                        = 256;
 	uint32_t test_ch_num                    = 0;
 	uint32_t test_ch_cnt                    = 1;
-	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_MEM_TO_MEM);
+	//uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_MEM_TO_MEM);
+	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV);
 	uint32_t test_desc_direction            = DMA_DESC_IN_DEVICE;
-	uint32_t test_desc_cnt                  = 3;
+	uint32_t test_desc_cnt                  = des_cnt - 1;
 	uint32_t test_block_cnt                 = 0;
 	uint64_t test_device_sar                = 0x0;
 	uint64_t test_device_dar                = 0x0;
-	uint64_t test_size                      = 4*1024*1024;
+	uint64_t test_size                      = des_cnt * 128;
 	uint32_t test_cnt                       = 1;
 
 	dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
