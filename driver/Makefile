@@ -1,7 +1,7 @@
 export CPATH:=${PWD}/lib
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
-VF_NUM ?= 8
+VF_NUM ?= 60
 DMA_RESV_MEM ?= 1
 DDR_SZ_GB ?= 48
 

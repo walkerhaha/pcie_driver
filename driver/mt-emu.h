@@ -77,8 +77,8 @@ struct emu_mtdma {
 
 struct emu_dmabuf {
 	struct miscdevice	miscdev;
-	void			*mtdma_vaddr;
-	u64			mtdma_paddr;
+	void				*mtdma_vaddr;
+	u64					mtdma_paddr;
 	u64                	mtdma_size;
 };
 

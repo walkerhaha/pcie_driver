@@ -23,7 +23,7 @@
 #define MT_GPU_NAME                 "mt_emu_gpu"
 #define MT_APU_NAME                 "mt_emu_apu"
 #define MT_VGPU_NAME                "mt_emu_vgpu"
-#define MT_MTDMA_NAME                "mt_emu_dmabuf"
+#define MT_MTDMA_NAME               "mt_emu_dmabuf"
 
 #define QY_MAX_RW                   (2*1024*1024)
 
@@ -37,10 +37,10 @@ enum {
 #define DMA_RESV_MEM              1
 #endif
 
-#define PF_NUM_MAX                   	1
-#define VF_NUM_MAX                   	8
-#ifndef VF_NUM	8
-#define VF_NUM  8
+#define PF_NUM_MAX                   	2
+#define VF_NUM_MAX                   	60
+#ifndef VF_NUM	
+#define VF_NUM  60
 #endif
 
 #define IATU_NUM 50
@@ -115,7 +115,7 @@ enum {
 #define MT_IOCTL_MTDMA_BARE_RW	_IOR(__MT_PCIE_IOCTL_MAGIC, 9, int)
 #define MT_IOCTL_MTDMA_RW		_IOR(__MT_PCIE_IOCTL_MAGIC, 10, int)
 #define MT_IOCTL_DMAISR_SET		_IOR(__MT_PCIE_IOCTL_MAGIC, 11, int)
-#define MT_IOCTL_TRIG_INT               _IOR(__MT_PCIE_IOCTL_MAGIC, 12, int)
+#define MT_IOCTL_TRIG_INT       _IOR(__MT_PCIE_IOCTL_MAGIC, 12, int)
 
 #define PCIEF_TGT_DSP               0
 #define PCIEF_TGT_FEC               1
