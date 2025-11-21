@@ -112,10 +112,10 @@ enum {
 #define MT_IOCTL_WAIT_INT		_IOR(__MT_PCIE_IOCTL_MAGIC, 6, int)
 #define MT_IOCTL_IPC			_IOR(__MT_PCIE_IOCTL_MAGIC, 7, int)
 #define MT_IOCTL_IRQ_INIT		_IOR(__MT_PCIE_IOCTL_MAGIC, 8, int)
-#define MT_IOCTL_MTDMA_BARE_RW	_IOR(__MT_PCIE_IOCTL_MAGIC, 9, int)
+#define MT_IOCTL_MTDMA_BARE_RW	        _IOR(__MT_PCIE_IOCTL_MAGIC, 9, int)
 #define MT_IOCTL_MTDMA_RW		_IOR(__MT_PCIE_IOCTL_MAGIC, 10, int)
 #define MT_IOCTL_DMAISR_SET		_IOR(__MT_PCIE_IOCTL_MAGIC, 11, int)
-#define MT_IOCTL_TRIG_INT       _IOR(__MT_PCIE_IOCTL_MAGIC, 12, int)
+#define MT_IOCTL_TRIG_INT               _IOR(__MT_PCIE_IOCTL_MAGIC, 12, int)
 
 #define PCIEF_TGT_DSP               0
 #define PCIEF_TGT_FEC               1
