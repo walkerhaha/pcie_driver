@@ -49,9 +49,9 @@ enum {
 #define DDR_SZ_GB                    48
 #endif
 
-#define PCIE_DMA_CH_NUM                 60
-#define PCIE_DMA_CH_RD_NUM              60
-#define PCIE_DMA_CH_WR_NUM              60
+#define PCIE_DMA_CH_NUM                 64
+#define PCIE_DMA_CH_RD_NUM              64
+#define PCIE_DMA_CH_WR_NUM              64
 
 //--------------------------------------------
 // DDR addr

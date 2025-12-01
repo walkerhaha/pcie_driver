@@ -125,6 +125,24 @@ void print_comm_reg(char *common_base, int ch)
 
 }
 
+void print_comm_ch_secure(char *common_base)
+{
+	int i;
+
+	for (i = 0; i < 64 * 4; i += 4) {
+		printf("ch_secure :%-2d  value:0x%-8x \n", i/4 ,  *(unsigned int *)(common_base + 0x20 + i));
+	}
+}
+
+void print_ch_osid(char *common_base)
+{
+	int i;
+
+	for (i = 0; i < 64 * 4; i += 4) {
+		printf("ch_osid :%-2d  value:0x%-8x \n", i/4 ,  *(unsigned int *)(common_base + 0x2000 + i));
+	}
+}
+
 void mtmda_reg_clean(char *io_base, int ch)
 {
 	int i  = 0;
@@ -179,6 +197,8 @@ int main(int argc, char **argv)
 		mtmda_reg_clean(io_base, ch);
 	else {
 		print_comm_reg(common_base, ch);
+		print_comm_ch_secure(common_base);
+		print_ch_osid(common_base);
 		print_channel_reg_rd(ch_base, ch);
 		print_channel_reg_wr(ch_base, ch);
 	}

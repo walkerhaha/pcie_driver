@@ -149,12 +149,11 @@ static void pcie_emu_gpu_free(struct pci_dev *pcid)
 		}
 
 		pci_set_drvdata(pcid, NULL);
-
-		// kangj dma
+		/*
 		if(emu_pcie->emu_mtdma.mtdma_chip != NULL) {
-			mtdma_remove(emu_pcie->emu_mtdma.mtdma_chip);
+			//mtdma_remove(emu_pcie->emu_mtdma.mtdma_chip);
 		}
-
+		*/
 		if (emu_pcie->region[6].vaddr) {
 			pci_iounmap(pcid, emu_pcie->region[6].vaddr);
 		}
@@ -543,9 +542,8 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 		goto error;
 	}
 
-	// kangj dma
-	//emu_pcie->mtdma_comm_vaddr = emu_pcie->region[BAR_0].vaddr + MT_DMA_COM_BASE(PCIE_DMA_IDX);
-	//mtdma_comm_init(emu_pcie->mtdma_comm_vaddr, VF_NUM);
+	emu_pcie->mtdma_comm_vaddr = emu_pcie->region[BAR_0].vaddr + REG_DMA_COMM_BASE;
+	mtdma_comm_init(emu_pcie->mtdma_comm_vaddr, VF_NUM);
 
 	struct emu_dmabuf *emu_dmabuf;
 	emu_dmabuf = emu_dmabuf_probe(pcid);
@@ -567,6 +565,7 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 	if (emu_pcie->emu_mtdma.mtdma_chip==NULL) {
 		printk("emu_mtdma.mtdma_chip==NULL\n");
 	}
+	/*
 	ret = mtdma_probe(emu_pcie->emu_mtdma.mtdma_chip);
 	if (ret) {
 		emu_pcie->emu_mtdma.mtdma_chip = NULL; //devm automatic free
@@ -574,6 +573,7 @@ static int pcie_emu_gpu_probe(struct pci_dev *pcid, const struct pci_device_id *
 		goto error;
 	}
 
+	*/
 	// init mtdma mmu
 	//pcie_mmu_init(emu_pcie->region[BAR_0].vaddr, emu_pcie->region[BAR_2].vaddr);
 	//pr_info("mtdma probe success\n");

@@ -111,9 +111,7 @@ static int mtdma_v0_core_device_config(struct mtdma_chan *chan)
 	return 0;
 }
 
-
-
-	static inline
+static inline
 struct device *dchan2dev(struct dma_chan *dchan)
 {
 	return &dchan->dev->device;
@@ -678,7 +676,6 @@ static int mtdma_channel_setup(struct mtdma_chip *chip)
 		dma->device_tx_status = mtdma_device_tx_status;
 		dma->device_prep_slave_sg = mtdma_device_prep_slave_sg;
 
-
 		dma_set_max_seg_size(dma->dev, U32_MAX);
 
 		/* Register DMA device */
@@ -694,7 +691,7 @@ int mtdma_probe(struct mtdma_chip *chip)
 	struct mtdma *md;
 	int err;
 
-	//	printk("mtdma_probe start\n");
+	printk("mtdma_probe start\n");
 	if (!chip)
 		return -EINVAL;
 
@@ -712,15 +709,16 @@ int mtdma_probe(struct mtdma_chip *chip)
 
 	md->rd_ch_cnt = min_t(u16, md->rd_ch_cnt, MTDMA_MAX_RD_CH);
 
-	if (!md->wr_ch_cnt && !md->rd_ch_cnt)
+	if (!md->wr_ch_cnt && !md->rd_ch_cnt) {
 		return -EINVAL;
-
+	}
 	dev_vdbg(dev, "Channels:\twrite=%d, read=%d\n",
 			md->wr_ch_cnt, md->rd_ch_cnt);
 
 	snprintf(md->name, sizeof(md->name), "mtdma-core:%d", chip->id);
 
 	/* Disable MTDMA, only to establish the ideal initial conditions */
+
 	mtdma_v0_core_off(md);
 
 	chip->txslavemap.devname = dev_name(dev);
@@ -772,7 +770,6 @@ int mtdma_remove(struct mtdma_chip *chip)
 		tasklet_kill(&chan->vc.task);
 		list_del(&chan->vc.chan.device_node);
 	}
-
 
 	return 0;
 }

@@ -32,20 +32,34 @@ MODULE_LICENSE("GPL v2");
 
 void mtdma_comm_init(void __iomem * mtdma_comm_vaddr, int vf_num) {
 	int i;
-	u64 dma_mask = 0x0000ffffffffffffULL;
+	u32 ver = 0;
+	u32 dma_mask = 0xffffffff;
 
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ENABLE, BIT(0)); //osid_en
+	ver = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_BASIC_PARAM);
+	pr_info("mtdma version is: 0x%x\n", ver);
+	/*
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(0), 0x1);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(1), 0x1);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(2), 0x1);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(3), 0x1);
+
+	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x0, 0);
+	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x4, 1);
+	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x8, 2);
+	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0xc, 3);
+	*/
+	//SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ENABLE, BIT(0)); //osid_en
+
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_NUM, PCIE_DMA_CH_NUM-1);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RCH_PF, ((DMA_WR_CH_DEPTH*PCIE_DMA_CH_NUM)/PCIE_DMA_CH_RD_NUM)-1);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WCH_PF, ((DMA_RD_CH_DEPTH*PCIE_DMA_CH_NUM)/PCIE_DMA_CH_WR_NUM)-1);
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST0_BLEN, (MST0_ARLEN<<4) | MST0_AWLEN);
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST1_BLEN, (MST1_ARLEN<<4) | MST1_AWLEN);
 	dma_mask >>= vf_num;
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ALARM_IMSK, 0);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_L, ~dma_mask);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_H, ~(dma_mask>>32));
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_L, ~dma_mask);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_H, ~(dma_mask>>32));
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C32, 0);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C64, 0x00000000);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C32, 0);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C64, 0x00000000);
+
 	if(GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WORK_STS)) {
 		printk( "dma init with busy error\n");
 	}
@@ -113,6 +127,9 @@ void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 
 	dma_bare->wr_ch_cnt = info->wr_ch_cnt;
 	dma_bare->rd_ch_cnt = info->rd_ch_cnt;
+
+	pr_info("dma_bare->wr_ch_cnt :%d\n", dma_bare->wr_ch_cnt);
+	pr_info("dma_bare->rd_ch_cnt :%d\n", dma_bare->rd_ch_cnt);
 
 	for(i = 0; i < info->wr_ch_cnt; i++) {
 		struct dma_bare_ch   *chan = &dma_bare->wr_ch[i];
@@ -222,7 +239,8 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 
 	sar_tmp = sar;
 	dar_tmp = dar;
-	pr_info("sar: 0x%llx dar: 0x%llx\n", sar, dar);
+
+	pr_info("dma_bare_xfer sar: 0x%llx dar: 0x%llx\n", sar, dar);
 	//00:H2D(cross and no dummy read)  
 	//01:H2H(no cross no dummy read) 
 	//10:H2D(cross no dummy read) 
@@ -279,7 +297,8 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		}
 #if (MTDMA_MMU==1)
 		pr_info("mtdma mmu enable in driver\n");
-		SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, 0x101);
+		SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, 0x1);
+		pr_info("chan :%d addr :0x%llx addr type :0x%x\n", bare_ch->chan_id, bare_ch->info.rg_vaddr + REG_DMA_CH_MMU_ADDR_TYPE, GET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE));
 #else
 		pr_info("mtdma mmu disable in driver\n");
 #endif
@@ -296,9 +315,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 			printk("dummy addr H:%x\n",dummy_addr_H);
 			printk("dummy addr L:%x\n",dummy_addr_L);
 		}
-
 	}
-
 	/*if((data_direction==DMA_DEV_TO_MEM)||(data_direction==DMA_MEM_TO_MEM)) {
 	  dummy_addr_H = GET_CH_32(bare_ch, REG_DUMMY_CH_ADDR_H);
 	  dummy_addr_L = GET_CH_32(bare_ch, REG_DUMMY_CH_ADDR_L);	
@@ -356,8 +373,8 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 					cnt = (i==desc_cnt_tmp) ? size_tmp : elm_cnt;
 				}
 				
-				if ( (i % 500)== 0) {
-					pr_info("desc cnt :%d\n", i);	
+				if ((i % 500) == 0) {
+					pr_info("desc cnt :%d\n", i);
 				}
 				if(i==0) {
 #if (MTDMA_MMU==1)
@@ -641,7 +658,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		printk(KERN_INFO "3: %x\n", bare_ch->int_mutex);
 		printk(KERN_INFO "4: %x\n", bare_ch->int_error);
 		*/
-		timeout_ms = 10000000;
+		pr_info("addr :0x%llx addr type :0x%x\n", bare_ch->info.rg_vaddr + REG_DMA_CH_MMU_ADDR_TYPE,  GET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE));
 		printk("mtdma channel %d wait interrupt time out :%d\n", bare_ch->chan_id, timeout_ms);
 		ret = wait_for_completion_timeout(&bare_ch->int_done, msecs_to_jiffies(timeout_ms));
 		//printk("xfer1 ch num: %d\n", bare_ch);

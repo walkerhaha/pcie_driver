@@ -18,8 +18,8 @@
 
 
 
-#define MTDMA_MAX_WR_CH					60
-#define MTDMA_MAX_RD_CH					60
+#define MTDMA_MAX_WR_CH					64
+#define MTDMA_MAX_RD_CH					64
 
 enum mtdma_request {
 	MTDMA_REQ_NONE = 0,

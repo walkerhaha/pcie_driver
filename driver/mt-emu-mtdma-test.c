@@ -32,7 +32,6 @@ MODULE_LICENSE("GPL v2");
 #include "mt-emu-mtdma-test.h"
 
 
-
 void emu_mtdma_isr(void *data, int rw, int ch) {
 	struct emu_mtdma *emu_mtdma =data;
 
@@ -96,15 +95,13 @@ int emu_mtdma_init(struct emu_mtdma *emu_mtdma, struct pci_dev *pcid, struct mtd
 		sema_init(&emu_mtdma->sem_rd[i], 1);
 	}
 
-
+	pr_info("mtdma_info->wr_ch_info :%d\n", mtdma_info->wr_ch_info);
 	emu_mtdma->mtdma_chip = chip;
 
 	return 0;
 }
 
 static int  mtdma_xfer(struct completion *done, struct dma_chan *chan, enum dma_transfer_direction dir, u64 laddr, struct sg_table	*sgt);
-
-
 
 int emu_dma_rw(struct emu_mtdma *emu_mtdma, struct mtdma_rw* test_info, char __user *userbuf)
 {

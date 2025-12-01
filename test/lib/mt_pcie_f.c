@@ -133,7 +133,7 @@ static struct pcie_f_fun *pcief_get_instance(uint8_t fun) {
 		return NULL;
 
 	pthread_mutex_lock(&g_pcief_mutex[fun]);
-	//printf("fun=%x, f=%x, size=%llx\n",fun, g_pcief.fun[fun].f, g_pcief.fun[fun].bars[0].bar_size);
+	printf("fun=%x, f=%x, size=%llx\n",fun, g_pcief.fun[fun].f, g_pcief.fun[fun].bars[0].bar_size);
 	if( !g_pcief.fun[fun].f ) {
 		int f = pcief_open(fun);
 		//printf("f=%x\n",f);
@@ -700,6 +700,7 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 	  }*/
 	if(vf) {
 		if(ch_num < 2) {
+			//fun = F_GPU;
 			fun = F_GPU;
 		}
 		else {
