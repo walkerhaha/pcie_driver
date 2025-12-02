@@ -37,41 +37,28 @@ void mtdma_comm_init(void __iomem * mtdma_comm_vaddr, int vf_num) {
 
 	ver = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_BASIC_PARAM);
 	pr_info("mtdma version is: 0x%x\n", ver);
-	/*
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(0), 0x1);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(1), 0x1);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(2), 0x1);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(3), 0x1);
-
-	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x0, 0);
-	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x4, 1);
-	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x8, 2);
-	SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0xc, 3);
-	*/
 	//SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ENABLE, BIT(0)); //osid_en
+
+	for (i = 0; i < 60; i++) {
+		SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(i), 0x1);
+		SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x4 * i, i);
+	}
 
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_NUM, PCIE_DMA_CH_NUM-1);
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST0_BLEN, (MST0_ARLEN<<4) | MST0_AWLEN);
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST1_BLEN, (MST1_ARLEN<<4) | MST1_AWLEN);
 	dma_mask >>= vf_num;
 	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ALARM_IMSK, 0);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C32, 0);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C64, 0x00000000);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C32, 0);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C64, 0x00000000);
+
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C32, 0xffffffff);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C64, 0x0fffffff);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C32, 0xffffffff);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C64, 0x0fffffff);
 
 	if(GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WORK_STS)) {
 		printk( "dma init with busy error\n");
 	}
 
-	//	for(i=0; i<PCIE_DMA_CH_NUM; i++) {
-	//		if(i<PCIE_DMA_CH_NUM-vf_num) {
-	//			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(i), BIT(16)); //hyper pf0
-	//		}
-	//		else {
-	//			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(i), i - (PCIE_DMA_CH_NUM - vf_num)); //vf
-	//		}
-	//	}
 }
 
 void build_dma_info(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg_vaddr, void __iomem *ll_vaddr, u8 vf, u8 wr_ch_cnt, u8 rd_ch_cnt, struct mtdma_info *dma_info)
@@ -158,6 +145,7 @@ void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 
 int dma_bare_isr(struct dma_bare_ch *bare_ch) {
 	u32 val;
+
 	val = GET_CH_32(bare_ch, REG_DMA_CH_INTR_RAW);
 
 	if(val & DMA_CH_INTR_BIT_DONE) {

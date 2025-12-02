@@ -602,281 +602,120 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 {
 	struct dma_bare_ch *bare_ch;
-	uint32_t rdata=0;
+	int8_t i  = 0;
+	uint8_t ch = 0;
+	uint32_t mrg_sts = 0, mrg_msk = 0, val = 0;
+	uint32_t rdata = 0, val_rd, val_wr;
 	uint32_t sts_c32, sts_c64;
-	unsigned char ch = 0;
-	char i  = 0;
-	unsigned int mrg_sts = 0, mrg_msk = 0, val = 0;
 	uint64_t mrg_rch_sts = 0, mrg_wch_sts = 0;
-	void *mtdma_comm_vaddr = emu_pcie->mtdma_comm_vaddr;
+	void *mtdma_comm_vaddr;
 
-	/*fouce isr type*/
-	if (src >= 0 && src < 4) {
-		ch = src + 60;
-		rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS  + ch * 0x1000);
-		if ((rdata & 0x1) == 1) {
-			printk("dma rd channel %d\n", ch);
-			bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
-			dma_bare_isr(bare_ch);
-		}
-	} else if (src >= 10 && src < 14) {
-		ch = src + 50;
-		rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + ch * 0x1000);
-		if((rdata & 0x1) == 1){
-			printk("dma wr channel %d\n", ch);
-			bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
-			dma_bare_isr(bare_ch);
-		}
-
-	} else if (src == 20) {
-		mrg_sts = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_STS);
-		if (mrg_sts & BIT(0)) {
-			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-			val |= BIT(0);
-			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
-
-			sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C32);
-			sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C64);
-			mrg_rch_sts = sts_c32 | (uint64_t)sts_c64 << 32;
-			pr_info("emu_dma isr, mrg_rch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_rch_sts, sts_c32, sts_c64);
-
-			for(i = 0; i < 64; i++) {
-				if (mrg_rch_sts >> i & 0x1) {
-					ch = i;
-					rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS  + ch * 0x1000);
-					if ((rdata & 0x1) == 1) {
-						printk("dma rd channel %d done\n", ch);
-						bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
-						dma_bare_isr(bare_ch);
-					}
-
-				}
+	if (emu_pcie->devfn >= 0 && emu_pcie->devfn < 2) {
+		mtdma_comm_vaddr = emu_pcie->mtdma_comm_vaddr;
+		if (src >= 0 && src < 4) {
+			ch = src + 60;
+			rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS  + ch * 0x1000);
+			if ((rdata & 0x1) == 1) {
+				printk("dma rd channel %d\n", ch);
+				bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
+				dma_bare_isr(bare_ch);
 			}
-			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-			val &= ~BIT(0);
-			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
-
-		} else if( mrg_sts & BIT(16)) {
-			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-			val |= BIT(16);
-			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
-
-			sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C32);
-			sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C64);
-			mrg_wch_sts =(uint64_t)sts_c64 << 32 | sts_c32;
-			pr_info("emu_dma isr, mrg_wch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_wch_sts, sts_c32, sts_c64);
-			for(i = 0; i < 64; i++) {
-				if (mrg_wch_sts >> i & 0x1) {
-					ch = i;
-					rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + ch * 0x1000);
-					if ((rdata & 0x1 ) == 1){
-						printk("dma wr channel %d done\n", ch);
-						bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
-						dma_bare_isr(bare_ch);
-					}
-				}
+		} else if (src >= 10 && src < 14) {
+			ch = src + 50;
+			rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + ch * 0x1000);
+			if((rdata & 0x1) == 1){
+				printk("dma wr channel %d\n", ch);
+				bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
+				dma_bare_isr(bare_ch);
 			}
 
-			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-			val &= ~BIT(16);
-			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
+		} else if (src == 20) {
+			mrg_sts = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_STS);
+			if (mrg_sts & BIT(0)) {
+				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+				val |= BIT(0);
+				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
 
+				sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C32);
+				sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C64);
+				mrg_rch_sts = sts_c32 | (uint64_t)sts_c64 << 32;
+				pr_info("emu_dma isr, mrg_rch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_rch_sts, sts_c32, sts_c64);
+
+				for(i = 60; i < PCIE_DMA_CH_NUM; i++) {
+					if (mrg_rch_sts >> i & 0x1) {
+						ch = i;
+						rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS  + ch * 0x1000);
+						if ((rdata & 0x1) == 1) {
+							printk("dma rd channel %d done\n", ch);
+							bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
+							dma_bare_isr(bare_ch);
+						}
+
+					}
+				}
+				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+				val &= ~BIT(0);
+				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
+
+			} else if(mrg_sts & BIT(16)) {
+				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+				val |= BIT(16);
+				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
+
+				sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C32);
+				sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C64);
+				mrg_wch_sts =(uint64_t)sts_c64 << 32 | sts_c32;
+				pr_info("emu_dma isr, mrg_wch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_wch_sts, sts_c32, sts_c64);
+				for(i = 0; i < PCIE_DMA_CH_NUM; i++) {
+					if (mrg_wch_sts >> i & 0x1) {
+						ch = i;
+						rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + ch * 0x1000);
+						if ((rdata & 0x1 ) == 1){
+							printk("dma wr channel %d done\n", ch);
+							bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
+							dma_bare_isr(bare_ch);
+						}
+					}
+				}
+
+				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+				val &= ~BIT(16);
+				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
+
+			} else {
+				pr_info("invalid mrg interrupt, mrg_sts: 0x%x\n", mrg_sts);
+			}
 		} else {
-			pr_info("invalid mrg interrupt, mrg_sts: 0x%x\n", mrg_sts);
+			pr_info("emu dma isr unknow int src: %d\n", src);
 		}
-	} else {
-		pr_info("emu dma isr unknow int src: %d\n", src);
+
+		dev_info(&emu_pcie->pcid->dev, "enter dma pf isr,devfn :%d ch :%d src :%d mrg_sts :0x%x, mrg_rch_sts=0x%llx, mrg_wch_sts:0x%llx\n",
+									emu_pcie->devfn, ch, src, mrg_sts, mrg_rch_sts, mrg_wch_sts);
 	}
 
-	dev_info(&emu_pcie->pcid->dev, "enter dma isr, mrg_sts :0x%x, mrg_rch_sts=0x%llx, mrg_wch_sts:0x%llx\n",mrg_sts, mrg_rch_sts, mrg_wch_sts);
-	dev_info(&emu_pcie->pcid->dev, "enter dma isr, src=%d, ch :%d\n",src, ch);
+	if (emu_pcie->devfn >= 2) {
+		ch = emu_pcie->devfn - 2;
+		val_rd = readl(emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_STATUS + 0x1000 * ch);
+		if (val_rd & 0x1) {
+			writel(0x1f, emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_IMSK + 0x1000 * ch);
+			writel(val_rd, emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_RAW + 0x1000 * ch);
+			bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
+			bare_ch->info.rg_vaddr = bare_ch->info.rg_vaddr + 0x2000;
+			dma_bare_isr(bare_ch);
+			writel(0x0, emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_IMSK + 0x1000 * ch);
+		}
 
-	/*if ((src>87)&&(src<104)) {
-	  uint32_t index = src - 88;
-	  uint32_t rdata=0;
-	  rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x1000*index);
-	  if((rdata&0x1)==1){
-	  printk("dma rd channel %d done\n", index);
-	  bare_ch = &emu_pcie->dma_bare.rd_ch[index];
-	  printk("dma rd channel %d done\n", bare_ch);
-	  int ret = dma_bare_isr(bare_ch);
-	  }else {
-	  printk("dma rd channel %d error, Intr status is 0x%x\n", index, rdata);
-	  }
-	  }
-	  else if ((src>71)&&(src<88)) {
-	  uint32_t index = src - 72;
-	  uint32_t rdata=0;
-	  rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + 0x1000*index);
-	  if((rdata&0x1)==1){
-	  printk("dma wr channel %d done\n", index);
-	  bare_ch = &emu_pcie->dma_bare.wr_ch[index];
-	  printk("dma wr channel %d done\n", bare_ch);
-	  int ret = dma_bare_isr(bare_ch);
-	  }else {
-	  printk("dma wr channel %d error, Intr status is 0x%x\n", index, rdata);
-	  }
-	  }
-	  else if (src==3) {
-	  printk("vpgu int dma_bare %d \n", &emu_pcie->dma_bare);
-	//			uint32_t ch_index = src;
-	//			unsigned long bar0_addr = pci_resource_start(0, 0);
-	//           uint32_t rdata = readl(bar0_addr + 0x3000 + REG_DMA_CH_INTR_STATUS + 0x1000*ch_index);
-	//            if((rdata&0x1)==1){
-	//                    printk("vf dma rd channel %d done\n", src);
-	bare_ch = &emu_pcie->dma_bare.rd_ch[0];
-	//bare_ch = &emu_pcie->dma_bare.rd_ch[test_info.ch_num]
-	printk("rd channel %d done\n", &emu_pcie->dma_bare.rd_ch[1]);
-	printk("rd channel %d done\n", bare_ch);
-	int ret = dma_bare_isr(bare_ch);
-	//            }else {
-	printk("dma wr channel %d error, Int\n", src);
-	//	}
+		val_wr = readl(emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_STATUS + 0x1000 * ch + 0x800);
+		if (val & 0x1) {
+			writel(0x1f, emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_IMSK + 0x1000 * ch + 0x800);
+			writel(val_wr, emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_RAW + 0x1000 * ch + 0x800);
+			bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
+			bare_ch->info.rg_vaddr = bare_ch->info.rg_vaddr + 0x2000 + 0x800;
+			dma_bare_isr(bare_ch);
+			writel(0x0, emu_pcie->region[0].vaddr + 0x2000 + REG_DMA_CH_INTR_IMSK + 0x1000 * ch + 0x800);
+		}
+		dev_info(&emu_pcie->pcid->dev, "enter dma vf isr, devfn :%d ch :%d src :%d\n", emu_pcie->devfn, ch, src, mrg_sts, mrg_rch_sts, mrg_wch_sts);
 	}
-	else if(src==104){
-
-	}
-	else {
-	printk("dma channel error, src is %x\n", src);
-	}*/
-	//if (src==187) {
-	//uint32_t rdata=0;
-	//uint32_t i=0;
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_R_STS_0);
-	//for(i=0; i<32; i++) {
-	//	if(((rdata>>i)&0x1)==1){
-	//		printk("dma rd channel %03d done\n",i);
-	//		bare_ch = &emu_pcie->dma_bare.rd_ch[i];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_R_STS_1);
-	//for(i=0; i<32; i++) {
-	//        if(((rdata>>i)&0x1)==1){
-	//		printk("dma rd channel %03d done\n",i+32);
-	//                bare_ch = &emu_pcie->dma_bare.rd_ch[i+32];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_R_STS_2);
-	//for(i=0; i<32; i++) {
-	//        if(((rdata>>i)&0x1)==1){
-	//		printk("dma rd channel %03d done\n",i+64);
-	//                bare_ch = &emu_pcie->dma_bare.rd_ch[i+64];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_R_STS_3);
-	//for(i=0; i<32; i++) {
-	//        if(((rdata>>i)&0x1)==1){
-	//		printk("dma rd channel %03d done\n",i+96);
-	//                bare_ch = &emu_pcie->dma_bare.rd_ch[i+96];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_W_STS_0);
-	//for(i=0; i<32; i++) {
-	//        if(((rdata>>i)&0x1)==1){
-	//		printk("dma wr channel %03d done\n",i);
-	//                bare_ch = &emu_pcie->dma_bare.wr_ch[i];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_W_STS_1);
-	//for(i=0; i<32; i++) {
-	//        if(((rdata>>i)&0x1)==1){
-	//		printk("dma wr channel %03d done\n",i+32);
-	//                bare_ch = &emu_pcie->dma_bare.wr_ch[i+32];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_W_STS_2);
-	//for(i=0; i<32; i++) {
-	//        if(((rdata>>i)&0x1)==1){
-	//		printk("dma wr channel %03d done\n",i+64);
-	//                bare_ch = &emu_pcie->dma_bare.wr_ch[i+64];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-
-	//rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_COMM_WR_MRG_W_STS_3);
-	//for(i=0; i<32; i++) {
-	//        if(((rdata>>i)&0x1)==1){
-	//		printk("dma wr channel %03d done\n",i+96);
-	//                bare_ch = &emu_pcie->dma_bare.wr_ch[i+96];
-	//		int ret = dma_bare_isr(bare_ch);
-	//	}
-	//}
-	//}else
-	//return;
-
-	//
-	//	u32 mask_rd_l, mask_rd_h, stat_rd_l, stat_rd_h, mask_wr_l, mask_wr_h, stat_wr_l, stat_wr_h;
-	//	u64 status_wr, status_rd, local_int_status;
-	//	int i, j;
-	//	
-	//    mask_rd_l = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_L);
-	//    mask_rd_h = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_H);
-	//    stat_rd_l = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_L);
-	//    stat_rd_h = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_H);
-	//    mask_wr_l = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_L);
-	//    mask_wr_h = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_H);
-	//    stat_wr_l = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_L);
-	//    stat_wr_h = GET_COMM_32(emu_pcie->mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_H);
-	//
-	//	stat_rd_l &= (~mask_rd_l);
-	//	stat_rd_h &= (~mask_rd_h);
-	//	stat_wr_l &= (~mask_wr_l);
-	//	stat_wr_h &= (~mask_wr_h);
-	//
-	//	status_rd = ((u64)stat_rd_h << 32) | (u64)stat_rd_l;
-	//	status_wr = ((u64)stat_wr_h << 32) | (u64)stat_wr_l;
-	//
-	//	//printk("status_rd %llx, status_wr %llx\n", status_rd, status_wr );
-	//
-	//	for (j = 0; j < 2; j++)
-	//	{
-	//		u32 ch_cnt;
-	//		int rw;
-	//
-	//		if (j == 0)
-	//		{
-	//			ch_cnt = emu_pcie->dma_bare.wr_ch_cnt;
-	//			local_int_status = status_wr;
-	//			rw = 0;
-	//		}
-	//		else
-	//		{
-	//			ch_cnt = emu_pcie->dma_bare.rd_ch_cnt;
-	//			local_int_status = status_rd;
-	//			rw = 1;
-	//		}
-	//
-	//		for (i = 0; i < ch_cnt; i++)
-	//		{
-	//			if (local_int_status & BIT(i))
-	//			{
-	//				if(emu_pcie->isr_dmabare) {
-	//					struct dma_bare_ch *bare_ch = rw ? &emu_pcie->dma_bare.rd_ch[i] : &emu_pcie->dma_bare.wr_ch[i];
-	//
-	//					int ret = dma_bare_isr(bare_ch);
-	//					printk("bare DMA %c ch%02d  int %s\n", rw ? 'r':'w', i, ret==0 ? "done" : "error");
-	//				}
-	//				else {
-	//					printk("DMA %c ch%02d  int\n", rw ? 'r':'w', i);
-	//					emu_mtdma_isr(&emu_pcie->emu_mtdma, rw, i);
-	//				}
-	//
-	//			}
-	//		}
-	//	}
 }
 
 void pcie_apu_th(int irq, struct emu_pcie *emu_pcie)
@@ -1009,6 +848,7 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 
 	//spin_lock(&emu_pcie->irq_lock);
 	//mutex_lock(&emu_pcie->int_mutex[irq]);
+
 	printk("vpgu start dma_bare %d \n", &emu_pcie->dma_bare);
 	printk("vpgu start dma_bare ch%d \n", &emu_pcie->dma_bare.rd_ch[1]);
 
@@ -1063,7 +903,7 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 			writel(int_reg|0x10000, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_SOFT(irq));
 
 			uint32_t claim = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_CLAIM(irq));
-			uint32_t src   = claim&0x7;
+			uint32_t src   = claim & 0x7;
 			printk("vf int src = %d\n", src);
 			if (src >= 6) {
 				dev_err(&emu_pcie->pcid->dev, "vgpu intr src num error, src=%d\n", src);
@@ -1095,7 +935,6 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 
 			writel(0x1, emu_pcie->region[0].vaddr + 0x3000 + 0x8c8);
 			rdata = readl(emu_pcie->region[0].vaddr + 0x3000 + 0x8c8);
-
 			emu_dma_isr(emu_pcie, src);
 			//writel(0x1, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(2));
 			//rdata = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(2));
@@ -1123,7 +962,7 @@ irqreturn_t pcie_th(int irq_nr, void *t) {
 	struct emu_pcie *emu_pcie = t;
 	int irq = irq_nr - emu_pcie->irq_vector;
 
-	pr_info("pcie pcie_th irq_nr :%d emu_pcie->irq_vector :%d\n", irq_nr, emu_pcie->irq_vector);
+	pr_info("pcie pcie_th irq_nr :%d emu_pcie->irq_vector :%d vf_num :%d\n", irq_nr, emu_pcie->irq_vector, emu_pcie->vf_num);
 	spin_lock(&emu_pcie->irq_lock);
 	switch(emu_pcie->type) {
 		case MT_EMU_TYPE_APU:
