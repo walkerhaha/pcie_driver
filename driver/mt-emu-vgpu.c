@@ -287,8 +287,10 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	/* Data structure initialization */
 	emu_pcie->devfn = pcid->devfn;
 	emu_pcie->pcid = pcid;
-
 	mutex_init(&emu_pcie->io_mutex);
+
+	pr_info("vgpu probe pcid->devfn :%d pcid :%d,\n", pcid->devfn, pcid);
+
 	spin_lock_init(&emu_pcie->irq_lock);
 	for(i=0; i<QY_INT_SRC_MAX_NUM; i++) {
 		init_completion(&emu_pcie->int_done[i]);
@@ -318,6 +320,7 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	dev_notice(&pcid->dev, "Added %04X:%04X\n", pcid->vendor, pcid->device);
 
 	sprintf(misc_dev_name, MT_VGPU_NAME "%d", pcid->devfn);
+	pr_info("vgpu misc register devname :%s\n", misc_dev_name);
 
 	emu_pcie->miscdev.minor = VGPU_STATIC_MINOR_START + pcid->devfn;
 	//emu_pcie->miscdev.minor = MISC_DYNAMIC_MINOR;
@@ -359,7 +362,6 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
 	pr_info("MTDMA probe succes\n");
 
 	dev_info(&pcid->dev, "Probe success\n");
-
 
 	return 0;
 error:

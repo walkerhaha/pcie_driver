@@ -129,6 +129,7 @@ static struct pcie_f_fun *pcief_get_instance(uint8_t fun) {
 	if( !g_pcief.init ) {
 		return NULL;
 	}
+
 	if(fun >= F_NUM)
 		return NULL;
 
@@ -699,18 +700,13 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 	  }
 	  }*/
 	if(vf) {
-		if(ch_num < 2) {
-			//fun = F_GPU;
+		if(ch_num >=0 && ch_num <60) {
+			fun = ch_num + 2;
+		} else {
 			fun = F_GPU;
 		}
-		else {
-			//fun = ch_num;
-			//ch_num = 0;
-			fun = F_GPU;
-		}
-	} 
-	else {
-		if(ch_num < 128) {
+	} else {
+		if(ch_num >= 0 && ch_num < 64) {
 			fun = F_GPU;
 		}
 	}

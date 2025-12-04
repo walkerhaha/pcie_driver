@@ -37,6 +37,7 @@ void mtdma_comm_init(void __iomem * mtdma_comm_vaddr, int vf_num) {
 
 	ver = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_BASIC_PARAM);
 	pr_info("mtdma version is: 0x%x\n", ver);
+
 	//SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ENABLE, BIT(0)); //osid_en
 
 	for (i = 0; i < 60; i++) {
@@ -97,10 +98,11 @@ void build_dma_info(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg_va
 			chan_info[i].ll_laddr_system = 0x000000000000 + off_system + ll_sz * i;
 
 			if(vf) {
-				chan_info[i].rg_vaddr = rg_vaddr + (j == 0 ? 0x3000+0x800 : 0x3000);
+				chan_info[i].rg_vaddr = rg_vaddr + (j == 0 ? 0x3000 + 0x800 : 0x3000);
+				pr_info("vf init %d, chan_info[i].rg_vaddr :0x%llx\n", j, chan_info[i].rg_vaddr);
 			}
 			else {
-				chan_info[i].rg_vaddr = rg_vaddr + (j == 0 ? 0x383000 + 0x1000 * i + 0x800 : 0x383000+0x1000*i);
+				chan_info[i].rg_vaddr = rg_vaddr + (j == 0 ? 0x383000 + 0x1000 * i + 0x800 : 0x383000 + 0x1000 * i);
 			}
 
 			//pr_debug("chan_info vf(%d) wr(%d) ch %d: rg_vaddr=%px, ll_max=%x, ll_laddr=%llx, ll_vaddr=%px}\n", vf ? 1 : 0,
@@ -278,6 +280,8 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		u32 cnt = size;
 
 		pr_info("mtdma use single mode\n");
+		pr_info("bare_ch->info.rg_vaddr :0x%llx\n", bare_ch->info.rg_vaddr);
+
 		if(i==0) {
 			lli = bare_ch->info.rg_vaddr + REG_DMA_CH_DESC_OPT;
 			u32 ch_lbar_basic = (desc_cnt<<16) | chain_en;

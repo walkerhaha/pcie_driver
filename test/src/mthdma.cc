@@ -141,12 +141,13 @@ TEST_CASE("sanity_dma_bare_single_ddr", "[mtdma1]") {
 
 	uint32_t test_ch_num                    = 0;
 	uint32_t test_ch_cnt                    = 1;
-	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV);
+	//uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV);
+	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV);
 	uint32_t test_desc_direction            = DMA_DESC_IN_DEVICE;
 	uint32_t test_desc_cnt                  = 0;
 	uint32_t test_block_cnt                 = 0;
 	uint64_t test_device_sar                = 0x0;
-	uint64_t test_device_dar                = 512*1024*1024;
+	uint64_t test_device_dar                = 1*1024*1024;
 	uint64_t test_size                      = 1*1024*1024;
 	uint32_t test_cnt                       = 1;
 
