@@ -32,31 +32,39 @@ MODULE_LICENSE("GPL v2");
 
 void mtdma_comm_init(void __iomem * mtdma_comm_vaddr, int vf_num) {
 	int i;
-	u32 ver = 0;
-	u32 dma_mask = 0xffffffff;
+	u32 ver = 0, c32, c64;
+	u64 dma_mask, val;;
 
 	ver = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_BASIC_PARAM);
 	pr_info("mtdma version is: 0x%x\n", ver);
 
 	//SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ENABLE, BIT(0)); //osid_en
 
-	for (i = 0; i < 60; i++) {
+
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ALARM_IMSK, 0);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_NUM, PCIE_DMA_CH_NUM-1);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST0_BLEN, (MST0_ARLEN<<4) | MST0_AWLEN);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST1_BLEN, (MST1_ARLEN<<4) | MST1_AWLEN);
+
+
+	for (i = 0; i < vf_num; i++) {
 		SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_OSID(i), 0x1);
 		SET_COMM_32(mtdma_comm_vaddr + 0x2000, 0x4 * i, i);
 	}
 
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_CH_NUM, PCIE_DMA_CH_NUM-1);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST0_BLEN, (MST0_ARLEN<<4) | MST0_AWLEN);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MST1_BLEN, (MST1_ARLEN<<4) | MST1_AWLEN);
-	dma_mask >>= vf_num;
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_COMM_ALARM_IMSK, 0);
+	dma_mask = (val << vf_num) | ((1ull << vf_num) - 1);
+	c32 = dma_mask & 0xffffffff;
+	c64 = dma_mask >> 32;
 
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C32, 0xffffffff);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C64, 0x0fffffff);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C32, 0xffffffff);
-	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C64, 0x0fffffff);
+	pr_info("mtdma_comm_init vf_num :%d dma_mask : 0x%llx c32 :0x%x c64 :0x%x\n", vf_num, dma_mask, c32, c64);
 
-	if(GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WORK_STS)) {
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C32, c32);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_IMSK_C64, c64);
+
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C32, c32);
+	SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_IMSK_C64, c64);
+
+	if (GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WORK_STS)) {
 		printk( "dma init with busy error\n");
 	}
 

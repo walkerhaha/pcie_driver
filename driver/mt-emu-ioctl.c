@@ -518,16 +518,28 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					return -EFAULT;
 				}
 
-				pr_info("drv MT_IOCTL_MTDMA_BARE_RW\n");
+				pr_info("mtdma drv MT_IOCTL_MTDMA_BARE_RW: ch :%d VF_NUM :%d\n", test_info.ch_num, VF_NUM);
 
-				if(test_info.data_direction == DMA_MEM_TO_MEM || test_info.data_direction == DMA_MEM_TO_DEV) {
-					bare_ch = &emu_pcie->dma_bare.rd_ch[test_info.ch_num];
-					pr_info("threads start ch num: %d\n", test_info.ch_num);
+				if (test_info.data_direction == DMA_MEM_TO_MEM || test_info.data_direction == DMA_MEM_TO_DEV) {
+					if (VF_NUM > 0) {
+						bare_ch = &emu_pcie->dma_bare.rd_ch[0];
+						pr_info("mtdma drv IOCTL_MTDMA_BARE_RW use vf rd test_info.ch_num 0\n");
+					} else {
+						bare_ch = &emu_pcie->dma_bare.rd_ch[test_info.ch_num];
+						pr_info("mtdma drv IOCTL_MTDMA_BARE_RW use pf rd test_info.ch_num :%d\n", test_info.ch_num);
+					}
+				} else {
+					if (VF_NUM > 0) {
+						pr_info("mtdma drv IOCTL_MTDMA_BARE_RW use vf wr test_info.ch_num 0\n");
+						bare_ch = &emu_pcie->dma_bare.wr_ch[0];
+					} else {
+						pr_info("mtdma drv IOCTL_MTDMA_BARE_RW use pf wr test_info.ch_num :%d\n", test_info.ch_num);
+						bare_ch = &emu_pcie->dma_bare.wr_ch[test_info.ch_num];
+					}
 				}
-				else
-					bare_ch = &emu_pcie->dma_bare.wr_ch[test_info.ch_num];
 
 				bare_ch->chan_id = test_info.ch_num;
+
 				/*
 				printk(KERN_INFO "1: %x\n", bare_ch->info);
 				printk(KERN_INFO "2: %x\n", bare_ch->int_done);
@@ -698,23 +710,22 @@ void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 	pr_info("%s %d  devfn :%d\n", __func__, __LINE__, emu_pcie->devfn);
 	if (emu_pcie->devfn >= 2) {
 		ch = emu_pcie->devfn - 2;
-		val_rd = readl(emu_pcie->region[0].vaddr + 0x3000 + REG_DMA_CH_INTR_STATUS + 0x1000 * ch);
-		pr_info("%s %d  val_rd 0x:%x\n", __func__, __LINE__, val_rd);
+		val_rd = readl(emu_pcie->region[0].vaddr + 0x3000 + REG_DMA_CH_INTR_STATUS);
+		pr_info("%s %d val_rd 0x:%x\n", __func__, __LINE__, val_rd);
 		if (val_rd & 0x1) {
 			bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
 			pr_info("vf rd devfn :%d ch :%d, bare_ch->info.rg_vaddr :0x%llx\n",emu_pcie->devfn, ch, bare_ch->info.rg_vaddr);
-
 			dma_bare_isr(bare_ch);
 		}
 
-		val_wr = readl(emu_pcie->region[0].vaddr + 0x3000 + REG_DMA_CH_INTR_STATUS + 0x1000 * ch + 0x800);
-		pr_info("%s %d  val_wr 0x:%x\n", __func__, __LINE__, val_wr);
+		val_wr = readl(emu_pcie->region[0].vaddr + 0x3800 + REG_DMA_CH_INTR_STATUS);
+		pr_info("%s %d val_wr 0x:%x\n", __func__, __LINE__, val_wr);
 		if (val_wr & 0x1) {
 			bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
 			pr_info("vf wr devfn :%d ch :%d, bare_ch->info.rg_vaddr :0x%llx\n",emu_pcie->devfn, ch, bare_ch->info.rg_vaddr);
 			dma_bare_isr(bare_ch);
 		}
-		dev_info(&emu_pcie->pcid->dev, "enter dma vf isr, devfn :%d ch :%d src :%d\n", emu_pcie->devfn, ch, src, mrg_sts, mrg_rch_sts, mrg_wch_sts);
+		dev_info(&emu_pcie->pcid->dev, "enter dma vf isr, devfn :%d ch :%d src :%d\n", emu_pcie->devfn, ch, src);
 	}
 }
 
@@ -907,8 +918,6 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 			}
 
 			emu_dma_isr(emu_pcie, src);
-			//writel(0x1, emu_pcie->region[0].vaddr + 0x3000 + 0x0c8);
-			//rdata = readl(emu_pcie->region[0].vaddr + 0x3000 + 0x0c8);
 
 			//writel(0x1, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(3));
 			//rdata = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(3));
@@ -931,8 +940,6 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 
 			emu_dma_isr(emu_pcie, src);
 			printk("dma vgpu irq 2 done\n");
-			//writel(0x1, emu_pcie->region[0].vaddr + 0x3000 + 0x8c8);
-			//rdata = readl(emu_pcie->region[0].vaddr + 0x3000 + 0x8c8);
 			//writel(0x1, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(2));
 			//rdata = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(2));
 			//complete(&bare_ch->int_done);
