@@ -86,7 +86,7 @@ static int pcief_open(uint8_t fun) {
 	//	    strcpy(dev_name, "/dev/" MT_APU_NAME);
 	else if(fun == F_MTDMA)
 		strcpy(dev_name, "/dev/" MT_MTDMA_NAME);
-	else if(fun < F_MTDMA) {
+	else if(fun < VF_NUM + 2) {
 		sprintf(dev_name, "/dev/" MT_VGPU_NAME "%d", fun);
 	}
 	else
@@ -110,7 +110,7 @@ static int pcief_misc_open(uint8_t fun, char* name) {
 	//	    sprintf(dev_name, "/sys/class/misc/" MT_APU_NAME "/%s", name);
 	else if(fun == F_MTDMA)
 		sprintf(dev_name, "/sys/class/misc/" MT_MTDMA_NAME "/%s", name);
-	else if(fun < F_MTDMA) {
+	else if(fun < VF_NUM + 2) {
 		sprintf(dev_name, "/sys/class/misc/" MT_VGPU_NAME "%d" "/%s", fun, name);
 	}
 	else
@@ -691,22 +691,14 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 	int vf = (VF_NUM==0) ? 0 : 1;
 	printf(" vf all = fun %0x", vf); 
 
-	/*if(vf) {
-	  fun =F_VGUP(vf);
-	  } 
-	  else {
-	  if(ch_num < 16) {
-	  fun = F_GPU;
-	  }
-	  }*/
 	if(vf) {
-		if(ch_num >=0 && ch_num <60) {
+		if(ch_num >=0 && ch_num <VF_NUM) {
 			fun = ch_num + 2;
 		} else {
 			fun = F_GPU;
 		}
 	} else {
-		if(ch_num >= 0 && ch_num < 64) {
+		if(ch_num >= 0 && ch_num < F_NUM) {
 			fun = F_GPU;
 		}
 	}
