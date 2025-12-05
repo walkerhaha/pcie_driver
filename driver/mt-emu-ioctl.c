@@ -622,8 +622,6 @@ void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 	uint64_t mrg_rch_sts = 0, mrg_wch_sts = 0;
 	void *mtdma_comm_vaddr;
 
-	pr_info("%s %d\n", __func__, __LINE__);
-
 	if (emu_pcie->devfn >= 0 && emu_pcie->devfn < 2) {
 		mtdma_comm_vaddr = emu_pcie->mtdma_comm_vaddr;
 		if (src >= 0 && src < 4) {
@@ -707,13 +705,12 @@ void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 				emu_pcie->devfn, ch, src, mrg_sts, mrg_rch_sts, mrg_wch_sts);
 	}
 
-	pr_info("%s %d  devfn :%d\n", __func__, __LINE__, emu_pcie->devfn);
 	if (emu_pcie->devfn >= 2) {
 		ch = emu_pcie->devfn - 2;
 		val_rd = readl(emu_pcie->region[0].vaddr + 0x3000 + REG_DMA_CH_INTR_STATUS);
 		pr_info("%s %d val_rd 0x:%x\n", __func__, __LINE__, val_rd);
 		if (val_rd & 0x1) {
-			bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
+			bare_ch = &emu_pcie->dma_bare.rd_ch[0];
 			pr_info("vf rd devfn :%d ch :%d, bare_ch->info.rg_vaddr :0x%llx\n",emu_pcie->devfn, ch, bare_ch->info.rg_vaddr);
 			dma_bare_isr(bare_ch);
 		}
@@ -721,11 +718,11 @@ void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 		val_wr = readl(emu_pcie->region[0].vaddr + 0x3800 + REG_DMA_CH_INTR_STATUS);
 		pr_info("%s %d val_wr 0x:%x\n", __func__, __LINE__, val_wr);
 		if (val_wr & 0x1) {
-			bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
+			bare_ch = &emu_pcie->dma_bare.wr_ch[0];
 			pr_info("vf wr devfn :%d ch :%d, bare_ch->info.rg_vaddr :0x%llx\n",emu_pcie->devfn, ch, bare_ch->info.rg_vaddr);
 			dma_bare_isr(bare_ch);
 		}
-		dev_info(&emu_pcie->pcid->dev, "enter dma vf isr, devfn :%d ch :%d src :%d\n", emu_pcie->devfn, ch, src);
+		dev_info(&emu_pcie->pcid->dev, "enter dma vf isr, devfn :%d ch :%d\n", emu_pcie->devfn, ch);
 	}
 }
 
@@ -902,58 +899,13 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 		if(ret==0)
 			complete(&emu_pcie->int_done[irq]);
 	} else {
-		uint32_t rdata = 0;
-		pr_info("enter vgpu interrupt, not in test irq mode, irq :%d\n", irq);
-		if (irq == 3) {
-			printk("dma vgpu irq :%d\n", irq);
-			uint32_t int_reg = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_SOFT(irq));
-			writel(int_reg|0x10000, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_SOFT(irq));
-
-			uint32_t claim = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_CLAIM(irq));
-			uint32_t src   = claim & 0x7;
-			printk("vf int src = %d\n", src);
-			if (src >= 6) {
-				dev_err(&emu_pcie->pcid->dev, "vgpu intr src num error, src=%d\n", src);
-				ret = -1;
-			}
-
-			emu_dma_isr(emu_pcie, src);
-
-			//writel(0x1, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(3));
-			//rdata = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(3));
-			//complete(&bare_ch->int_done);
-			//complereceived vgpu intr te(&emu_pcie->int_done[irq]);
-			printk("dma vgpu irq 3 done\n");
+		pr_info("enter vf interrupt, not in test irq mode, irq :%d\n", irq);
+		if (irq == 3 || irq == 2) {
+			emu_dma_isr(emu_pcie, 0);
+			pr_info("dma vgpu irq %d done\n", irq);
+		} else {
+			pr_info("dma vgpu unknown irq %d\n", irq);
 		}
-		else if(irq == 2) {
-			printk("dma vgpu irq :%d\n", irq);
-			uint32_t int_reg = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_SOFT(irq));
-			//writel(int_reg|0x10000, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_SOFT(irq));
-
-			uint32_t claim = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_CLAIM(irq));
-			uint32_t src   = claim&0x7;
-			printk("vf int src = %d\n", src);
-			if (src >= 6) {
-				dev_err(&emu_pcie->pcid->dev, "vgpu intr src num error, src=%d\n", src);
-				ret = -1;
-			}
-
-			emu_dma_isr(emu_pcie, src);
-			printk("dma vgpu irq 2 done\n");
-			//writel(0x1, emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(2));
-			//rdata = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_COMP(2));
-			//complete(&bare_ch->int_done);
-			//complete(&emu_pcie->int_done[irq]);
-		}
-
-		//if(rdata==0){
-		//bare_ch = &emu_pcie->dma_bare.rd_ch[0];
-		//int ret = dma_bare_isr(bare_ch);
-		//}
-		//else if(rdata==1){
-		//bare_ch = &emu_pcie->dma_bare.rd_ch[1];
-		//int ret = dma_bare_isr(bare_ch);
-		//}
 
 	}
 
