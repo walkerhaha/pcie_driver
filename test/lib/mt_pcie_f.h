@@ -8,11 +8,12 @@ extern "C"{
 #define F_RW_ALIGN_BYTE             8
 #define F_RW_ALIGN                  __attribute__((aligned(F_RW_ALIGN_BYTE)))
 
-#define VF_NUM     8
+#define VF_NUM     60
 #define F_GPU      0
 #define F_APU      1
-#define F_VGUP_ST  2
+#define F_VGUP_ST  1
 #define F_VGUP(i)  (F_VGUP_ST + i)
+#define F_VGUP_NUM 8
 #define F_MTDMA    (VF_NUM + 1)
 #define F_NUM      (VF_NUM + 2)
 

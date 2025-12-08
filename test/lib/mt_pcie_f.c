@@ -84,12 +84,15 @@ static int pcief_open(uint8_t fun) {
 		strcpy(dev_name, "/dev/" MT_GPU_NAME);
 	//    else if(fun == F_APU)
 	//	    strcpy(dev_name, "/dev/" MT_APU_NAME);
-	else if(fun >= 2 &&  fun < F_NUM)
+	else if(fun == F_MTDMA)
+		strcpy(dev_name, "/dev/" MT_MTDMA_NAME);
+	else if(fun >= 2 && fun <= VF_NUM) {
 		sprintf(dev_name, "/dev/" MT_VGPU_NAME "%d", fun);
+	}
 	else
 		return -1;
 
-	printf("%s fun :%d open %s\n",__func__, fun, dev_name);
+	//printf("open %s\n", dev_name);
 
 	return open(dev_name, O_RDWR|O_SYNC);
 }
@@ -105,12 +108,15 @@ static int pcief_misc_open(uint8_t fun, char* name) {
 		sprintf(dev_name, "/sys/class/misc/" MT_GPU_NAME "/%s", name);
 	//    else if(fun == F_APU)
 	//	    sprintf(dev_name, "/sys/class/misc/" MT_APU_NAME "/%s", name);
-	else if(fun >= 2 && fun < F_NUM)
+	else if(fun == F_MTDMA)
+		sprintf(dev_name, "/sys/class/misc/" MT_MTDMA_NAME "/%s", name);
+	else if(fun >= 2 && fun <= VF_NUM) {
 		sprintf(dev_name, "/sys/class/misc/" MT_VGPU_NAME "%d" "/%s", fun, name);
+	}
 	else
 		return -1;
 
-	printf("%s fun :%d open %s\n",__func__, fun, dev_name);
+	//printf("open %s\n", dev_name);
 
 	return open(dev_name, O_RDONLY);
 }
@@ -121,16 +127,14 @@ static void pcief_misc_close(int hd) {
 
 static struct pcie_f_fun *pcief_get_instance(uint8_t fun) {
 	if( !g_pcief.init ) {
-		printf("err,g_pcief.init uninit, return null\n");
 		return NULL;
 	}
 
-	if(fun >= F_NUM) {
-		printf("err, fun :%d > F_NUM :%d\n", fun, F_NUM);
+	if(fun >= F_NUM)
 		return NULL;
-	}
+
 	pthread_mutex_lock(&g_pcief_mutex[fun]);
-	printf("fun=%d, f= 0x%x, size=%llx\n",fun, g_pcief.fun[fun].f, g_pcief.fun[fun].bars[0].bar_size);
+	//printf("fun=%x, f=%x, size=%llx\n",fun, g_pcief.fun[fun].f, g_pcief.fun[fun].bars[0].bar_size);
 	if( !g_pcief.fun[fun].f ) {
 		int f = pcief_open(fun);
 		//printf("f=%x\n",f);
@@ -214,9 +218,9 @@ void pcief_init() {
 	}
 
 	for(int i=0; i<F_NUM; i++) {
-
 		pcief_get_instance(i);
 	}
+
 	//pcief_test_intr_init(IRQ_MSI, IRQ_MSI, IRQ_MSI);
 }
 
@@ -483,7 +487,6 @@ int pcief_dmabuf_write(uint64_t offset, uint32_t len, void* data){
 }
 
 int pcief_dmabuf_read(uint64_t offset, uint32_t len, void* data){
-
 	lseek(pcief_get_instance(F_MTDMA)->f, offset, SEEK_SET);
 	read(pcief_get_instance(F_MTDMA)->f, data, len);
 }
@@ -766,7 +769,6 @@ int pcief_mtdma_engine_start(int fun, struct mtdma_rw *info, void* rw_buf, uint3
 
 	emu_param->d0 = sizeof(struct mtdma_rw) + info->size;
 	memcpy(test_info, info, sizeof(struct mtdma_rw));
-
 
 	pcief_dmaisr_set(fun, 0);
 
