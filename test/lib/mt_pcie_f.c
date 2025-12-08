@@ -84,7 +84,7 @@ static int pcief_open(uint8_t fun) {
 		strcpy(dev_name, "/dev/" MT_GPU_NAME);
 	//    else if(fun == F_APU)
 	//	    strcpy(dev_name, "/dev/" MT_APU_NAME);
-	else if(fun >= 2 &&  fun < PF_NUM)
+	else if(fun >= 2 &&  fun < F_NUM)
 		sprintf(dev_name, "/dev/" MT_VGPU_NAME "%d", fun);
 	else
 		return -1;
@@ -105,7 +105,7 @@ static int pcief_misc_open(uint8_t fun, char* name) {
 		sprintf(dev_name, "/sys/class/misc/" MT_GPU_NAME "/%s", name);
 	//    else if(fun == F_APU)
 	//	    sprintf(dev_name, "/sys/class/misc/" MT_APU_NAME "/%s", name);
-	else if(fun >= 2 && fun < PF_NUM)
+	else if(fun >= 2 && fun < F_NUM)
 		sprintf(dev_name, "/sys/class/misc/" MT_VGPU_NAME "%d" "/%s", fun, name);
 	else
 		return -1;
@@ -214,6 +214,7 @@ void pcief_init() {
 	}
 
 	for(int i=0; i<F_NUM; i++) {
+
 		pcief_get_instance(i);
 	}
 	//pcief_test_intr_init(IRQ_MSI, IRQ_MSI, IRQ_MSI);
@@ -482,6 +483,7 @@ int pcief_dmabuf_write(uint64_t offset, uint32_t len, void* data){
 }
 
 int pcief_dmabuf_read(uint64_t offset, uint32_t len, void* data){
+
 	lseek(pcief_get_instance(F_MTDMA)->f, offset, SEEK_SET);
 	read(pcief_get_instance(F_MTDMA)->f, data, len);
 }

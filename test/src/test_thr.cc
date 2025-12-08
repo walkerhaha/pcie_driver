@@ -302,7 +302,7 @@ static int compare_pattern(int type, void *src, void *dst, uint64_t addr, uint32
 int host_mem_wr(uint64_t len) {
 	MTDMA_ADDR_DEF
 
-		uint64_t start_wr_addr  = pcief_dmabuf_malloc(len);
+	uint64_t start_wr_addr  = pcief_dmabuf_malloc(len);
 	uint64_t vdar           = mtdma_maddr + start_wr_addr;
 	uint32_t tmp = 0;
 	uint32_t i = 0;;
@@ -339,7 +339,7 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 	long time_use_rd = 0, time_use_wr = 0;
 	MTDMA_ADDR_DEF
 
-		char* name[] = {"H2H", "H2D", "D2H", "D2D"};
+	char* name[] = {"H2H", "H2D", "D2H", "D2D"};
 
 	if(block_cnt==0) {
 		len_m = len;
