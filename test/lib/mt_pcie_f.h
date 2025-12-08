@@ -14,7 +14,7 @@ extern "C"{
 #define F_VGUP_ST  2
 #define F_VGUP(i)  (F_VGUP_ST + i)
 #define F_MTDMA     128
-#define F_NUM      64
+#define F_NUM      (VF_NUM + 2)
 
 #define F_BAR_MAX  7
 
