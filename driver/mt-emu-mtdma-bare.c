@@ -213,6 +213,7 @@ static void dma_desc_dump(struct dma_bare_ch *bare_ch, struct dma_ch_desc * *lli
 }
 
 int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t desc_direction, uint32_t desc_cnt, uint32_t block_cnt, uint64_t sar, uint64_t dar, uint32_t size, uint32_t ch_num, uint32_t timeout_ms) {
+	int i, j, ret;
 	uint32_t ch_en = 0;
 	uint32_t direction = 0;
 	uint32_t elm_cnt;
@@ -221,14 +222,15 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 	uint32_t dummy_read_addr;
 	uint32_t dummy_addr_L;
 	uint32_t dummy_addr_H;
-	uint64_t sar_tmp, dar_tmp;
-	int i, j, ret;
-	struct dma_ch_desc *lli;
-	//struct dma_ch_desc *lli_rw[65536];
 	uint32_t offset=0;
 	uint32_t rand_flag;
 	uint32_t desc_cnt_max;
-	u32 desc_cnt_total=0;
+	uint32_t desc_cnt_total=0;
+	uint32_t addr_type = 0;
+	uint64_t sar_tmp, dar_tmp;
+	struct dma_ch_desc *lli;
+	//struct dma_ch_desc *lli_rw[65536];
+
 	rand_flag = desc_cnt>>31;
 	desc_cnt_max = desc_cnt & 0x7fffffff;
 
@@ -238,7 +240,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 	sar_tmp = sar;
 	dar_tmp = dar;
 
-	pr_info("dma_bare_xfer sar: 0x%llx dar: 0x%llx\n", sar, dar);
+	pr_info("dma_bare_xfer src addr: 0x%llx dst addr: 0x%llx\n", sar, dar);
 	//00:H2D(cross and no dummy read)  
 	//01:H2H(no cross no dummy read) 
 	//10:H2D(cross no dummy read) 
@@ -257,13 +259,16 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 			pr_info("DMA_MEM_TO_MEM direction %d\n",direction);
 			break;
 		case DMA_MEM_TO_DEV:
+			addr_type = 0x100;
 			pr_info("DMA_MEM_TO_DEV direction %d\n",direction);
 			break;
 		case DMA_DEV_TO_MEM:
+			addr_type = 0x1;
 			direction |= DMA_CH_EN_BIT_DUMMY;
 			pr_info("DMA_DEV_TO_MEM direction %d\n",direction);
 			break;
 		case DMA_DEV_TO_DEV:
+			addr_type = 0x101;
 			direction |= DMA_CH_EN_BIT_NOCROSS;
 			pr_info("DMA_DEV_TO_DEV direction %d\n",direction);
 			break;
@@ -297,7 +302,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		}
 #if (MTDMA_MMU==1)
 		pr_info("mtdma mmu enable in driver\n");
-		SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, 0x1);
+		SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, addr_type);
 		pr_info("chan :%d addr :0x%llx addr type :0x%x\n", bare_ch->chan_id, bare_ch->info.rg_vaddr + REG_DMA_CH_MMU_ADDR_TYPE, GET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE));
 #else
 		pr_info("mtdma mmu disable in driver\n");
@@ -378,7 +383,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 				}
 				if(i==0) {
 #if (MTDMA_MMU==1)
-					SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, 0x101);
+					SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, addr_type);
 #endif
 					lli = bare_ch->info.rg_vaddr + REG_DMA_CH_DESC_OPT;
 					u32 ch_lbar_basic = (desc_cnt_tmp<<16) | chain_en;

@@ -1052,7 +1052,6 @@ int irq_init(struct emu_pcie *emu_pcie, int type, int test_mode) {
 
 	/* Register mailbox interrupt handler */
 	emu_pcie->irq_vector = pci_irq_vector(emu_pcie->pcid, 0);
-	printk("vgpu irg init dma_bare %d \n", &emu_pcie->dma_bare);
 
 	for (i = 0; i < emu_pcie->vec_num; i++) {
 		ret = request_irq(pci_irq_vector(emu_pcie->pcid, i), pcie_th, 0, emu_pcie->type == MT_EMU_TYPE_APU ? MT_APU_NAME : emu_pcie->type == MT_EMU_TYPE_GPU ? MT_GPU_NAME : MT_VGPU_NAME, emu_pcie);

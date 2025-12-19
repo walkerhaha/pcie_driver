@@ -31,8 +31,6 @@ MODULE_LICENSE("GPL v2");
 
 #define MTDMA_BUF_ST 0x400000000UL
 
-
-
 static int emu_dmabuf_open(struct inode *inode, struct file *file)
 {
 	return 0;
@@ -191,9 +189,6 @@ static struct attribute *emu_dmabuf_attrs[] =
 };
 
 ATTRIBUTE_GROUPS(emu_dmabuf);
-
-
-
 
 struct emu_dmabuf *emu_dmabuf_probe(struct pci_dev *pcid)
 {
