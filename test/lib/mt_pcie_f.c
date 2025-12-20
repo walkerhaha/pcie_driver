@@ -86,7 +86,7 @@ static int pcief_open(uint8_t fun) {
 	//	    strcpy(dev_name, "/dev/" MT_APU_NAME);
 	else if(fun == F_MTDMA)
 		strcpy(dev_name, "/dev/" MT_MTDMA_NAME);
-	else if(fun >= 2 && fun <= VF_NUM) {
+	else if(fun >= 2 && fun < VF_NUM + 2) {
 		sprintf(dev_name, "/dev/" MT_VGPU_NAME "%d", fun);
 	}
 	else
@@ -110,7 +110,7 @@ static int pcief_misc_open(uint8_t fun, char* name) {
 	//	    sprintf(dev_name, "/sys/class/misc/" MT_APU_NAME "/%s", name);
 	else if(fun == F_MTDMA)
 		sprintf(dev_name, "/sys/class/misc/" MT_MTDMA_NAME "/%s", name);
-	else if(fun >= 2 && fun <= VF_NUM) {
+	else if(fun >= 2 && fun < VF_NUM + 2) {
 		sprintf(dev_name, "/sys/class/misc/" MT_VGPU_NAME "%d" "/%s", fun, name);
 	}
 	else
@@ -130,7 +130,7 @@ static struct pcie_f_fun *pcief_get_instance(uint8_t fun) {
 		return NULL;
 	}
 
-	if(fun >= F_NUM)
+	if (fun >= F_NUM)
 		return NULL;
 
 	pthread_mutex_lock(&g_pcief_mutex[fun]);
@@ -833,12 +833,13 @@ int pcief_irq_init(uint8_t fun, uint8_t type, uint8_t test_mode) {
 
 int pcief_dmaisr_set(uint8_t fun, uint8_t dmabare) {
 	int ret;
+	int f;
 	char data_rd[sizeof(struct mt_emu_param)] __attribute__((aligned(8)));
 	struct mt_emu_param *emu_param = (struct mt_emu_param *)data_rd;
 
 	emu_param->b0 = dmabare;
-
-	ret = ioctl(pcief_get_instance(fun)->f, MT_IOCTL_DMAISR_SET, emu_param);
+	f = pcief_get_instance(fun)->f;
+	ret = ioctl(f, MT_IOCTL_DMAISR_SET, emu_param);
 	if (ret != 0) {
 		printf("pcief_dmaisr_set error\n");
 		return -1;

@@ -376,12 +376,8 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 		uint32_t val;
 		long time_st, time_use;
 
-#if (MTDMA_MMU==0)
-		//kangjian mmu
+
 		prepare_pattern(data_direction_bits, (void *)vsar, len_m);
-#else
-		prepare_pattern(data_direction_bits, (void *)(vsar+0x180000000ULL), len_m);
-#endif
 
 		if(data_direction_bits == BIT(DMA_MEM_TO_MEM)) {
 			printf("\n****************\n");
@@ -450,17 +446,11 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 
 			LInfo("rd_data {:x}\n", ((uint32_t *)vdar)[0]);
 		}
-#if (MTDMA_MMU==0)
+
 		if(0 != compare_pattern(data_direction_bits, (void*)vsar, (void*)vdar, device_sar, size)) {			
 			ret = -1;
 			break;
 		}
-#else
-		if(0 != compare_pattern(data_direction_bits, (void*)(vsar+0x180000000), (void*)(vdar+0x180000000), device_sar, size)) {
-			ret = -1;
-			break;
-		}
-#endif
 
 		LInfo("MTDMA{:d} {:d}MB: rspeed {:3.3f}MB/s wspeed {:3.3f}MB/s\n", ch_num, cnt*len_m/1024/1024, cnt*len_m*SPEED_CAL/time_use_rd, cnt*len_m*SPEED_CAL/time_use_wr);
 

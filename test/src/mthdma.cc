@@ -41,7 +41,6 @@
 
 #define MTDMA_TEST_SIZE           	(128*1024)
 #define PCIE_MULTI_TEST_NUM      	1000
-#define MTDMA_MMU 1
 
 #define MTDMA_RW_TEST_SIZE   		(16* 1024 * 1024)
 
@@ -106,6 +105,7 @@ static void dma_bare_simple_test(uint32_t ch_start_num, uint32_t ch_cnt, uint32_
 		pthread_join(mtdma_thr[i].thr, (void **)&mtdma_thr_ret[i]);
 		REQUIRE(*mtdma_thr_ret[i] == 0);
 	}
+
 }
 
 
@@ -139,16 +139,14 @@ TEST_CASE("sanity_dma_bare_single_ddr", "[mtdma1]") {
 
 	LInfo("TEST_CASE sanity_dma_bare_single init\n");
 
-	uint32_t test_ch_num                    = 1;
-	uint32_t test_ch_cnt                    = 1;
-	//uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV);
-	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV);
-	//uint32_t test_data_direction_bits       = BIT(DMA_DEV_TO_MEM);
+	uint32_t test_ch_num                    = 0;
+	uint32_t test_ch_cnt                    = 4;
+	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV);
 	uint32_t test_desc_direction            = DMA_DESC_IN_DEVICE;
 	uint32_t test_desc_cnt                  = 0;
 	uint32_t test_block_cnt                 = 0;
-	uint64_t test_device_sar                = 0x0;
-	uint64_t test_device_dar                = 0x0;
+	uint64_t test_device_sar                = 0x40000000;
+	uint64_t test_device_dar                = 0x40000000;
 	uint64_t test_size                      = 1*1024*1024;
 	uint32_t test_cnt                       = 1;
 

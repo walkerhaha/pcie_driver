@@ -33,7 +33,6 @@ int main( int argc, char* argv[] )
 		std::cout << "cfg file " << cfg << std::endl;
 
 	}
-
 	pcief_init();
 
 	session.run();
