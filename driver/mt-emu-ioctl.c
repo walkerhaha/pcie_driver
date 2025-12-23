@@ -622,83 +622,64 @@ void emu_dma_isr(struct emu_pcie *emu_pcie, uint32_t src)
 	uint64_t mrg_rch_sts = 0, mrg_wch_sts = 0;
 	void *mtdma_comm_vaddr;
 
+
 	if (emu_pcie->devfn >= 0 && emu_pcie->devfn < 2) {
 		mtdma_comm_vaddr = emu_pcie->mtdma_comm_vaddr;
-		if (src >= 0 && src < 4) {
-			ch = src + 60;
-			rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS  + ch * 0x1000);
-			if ((rdata & 0x1) == 1) {
-				printk("dma rd channel %d\n", ch);
-				bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
-				dma_bare_isr(bare_ch);
+
+		mrg_sts = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_STS);
+		if (mrg_sts & BIT(0)) {
+			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+			val |= BIT(0);
+			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
+
+			sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C32);
+			sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C64);
+			mrg_rch_sts = sts_c32 | (uint64_t)sts_c64 << 32;
+			pr_info("emu_dma isr, mrg_rch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_rch_sts, sts_c32, sts_c64);
+
+			for(i = 0; i < PCIE_DMA_CH_NUM; i++) {
+				if (mrg_rch_sts >> i & 0x1) {
+					ch = i;
+					rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS  + ch * 0x1000);
+					if ((rdata & 0x1) == 1) {
+						printk("dma rd channel %d done\n", ch);
+						bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
+						dma_bare_isr(bare_ch);
+					}
+
+				}
 			}
-		} else if (src >= 10 && src < 14) {
-			ch = src + 50;
-			rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + ch * 0x1000);
-			if((rdata & 0x1) == 1){
-				printk("dma wr channel %d\n", ch);
-				bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
-				dma_bare_isr(bare_ch);
-			}
+			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+			val &= ~BIT(0);
+			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
 
-		} else if (src == 20) {
-			mrg_sts = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_STS);
-			if (mrg_sts & BIT(0)) {
-				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-				val |= BIT(0);
-				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
+		} else if(mrg_sts & BIT(16)) {
+			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+			val |= BIT(16);
+			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
 
-				sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C32);
-				sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_RD_MRG_PF0_STS_C64);
-				mrg_rch_sts = sts_c32 | (uint64_t)sts_c64 << 32;
-				pr_info("emu_dma isr, mrg_rch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_rch_sts, sts_c32, sts_c64);
-
-				for(i = 60; i < PCIE_DMA_CH_NUM; i++) {
-					if (mrg_rch_sts >> i & 0x1) {
-						ch = i;
-						rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS  + ch * 0x1000);
-						if ((rdata & 0x1) == 1) {
-							printk("dma rd channel %d done\n", ch);
-							bare_ch = &emu_pcie->dma_bare.rd_ch[ch];
-							dma_bare_isr(bare_ch);
-						}
-
+			sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C32);
+			sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C64);
+			mrg_wch_sts =(uint64_t)sts_c64 << 32 | sts_c32;
+			pr_info("emu_dma isr, mrg_wch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_wch_sts, sts_c32, sts_c64);
+			for(i = 0; i < PCIE_DMA_CH_NUM; i++) {
+				if (mrg_wch_sts >> i & 0x1) {
+					ch = i;
+					rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + ch * 0x1000);
+					if ((rdata & 0x1 ) == 1){
+						printk("dma wr channel %d done\n", ch);
+						bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
+						dma_bare_isr(bare_ch);
 					}
 				}
-				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-				val &= ~BIT(0);
-				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
-
-			} else if(mrg_sts & BIT(16)) {
-				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-				val |= BIT(16);
-				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
-
-				sts_c32 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C32);
-				sts_c64 = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_WR_MRG_PF0_STS_C64);
-				mrg_wch_sts =(uint64_t)sts_c64 << 32 | sts_c32;
-				pr_info("emu_dma isr, mrg_wch_sts :0x%llx sts_c32 :0x%x sts_64 :0x%x\n", mrg_wch_sts, sts_c32, sts_c64);
-				for(i = 0; i < PCIE_DMA_CH_NUM; i++) {
-					if (mrg_wch_sts >> i & 0x1) {
-						ch = i;
-						rdata = readl(emu_pcie->region[0].vaddr + REG_DMA_CHAN_BASE + REG_DMA_CH_INTR_STATUS + 0x800 + ch * 0x1000);
-						if ((rdata & 0x1 ) == 1){
-							printk("dma wr channel %d done\n", ch);
-							bare_ch = &emu_pcie->dma_bare.wr_ch[ch];
-							dma_bare_isr(bare_ch);
-						}
-					}
-				}
-
-				val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
-				val &= ~BIT(16);
-				SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
-
-			} else {
-				pr_info("invalid mrg interrupt, mrg_sts: 0x%x\n", mrg_sts);
 			}
+
+			val = GET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK);
+			val &= ~BIT(16);
+			SET_COMM_32(mtdma_comm_vaddr, REG_DMA_COMM_MRG_PF0_IMSK, val);
+
 		} else {
-			pr_info("emu dma isr unknow int src: %d\n", src);
+			pr_info("invalid mrg interrupt, mrg_sts: 0x%x\n", mrg_sts);
 		}
 
 		dev_info(&emu_pcie->pcid->dev, "enter dma pf isr,devfn :%d ch :%d src :%d mrg_sts :0x%x, mrg_rch_sts=0x%llx, mrg_wch_sts:0x%llx\n",
