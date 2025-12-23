@@ -337,7 +337,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 			void* desc_size;
 		
 			pr_info("Max kmalloc size: 0x%x bytes\n", KMALLOC_MAX_SIZE);
-			desc_size = kmalloc(1024 * 1024 * 3, GFP_KERNEL);
+			desc_size = kvmalloc(1024 * 1024 * 4, GFP_KERNEL);
 			if(!desc_size)
 				printk("desc_size kmalloc failed\n");
 			if(rand_flag==1) {
@@ -434,7 +434,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 				printk("dummy addr H:%x\n",dummy_addr_H);
 				printk("dummy addr L:%x\n",dummy_addr_L);
 			}
-			kfree(desc_size);
+			kvfree(desc_size);
 		} 
 
 		/////////////////--------block type-------//////////////////////
