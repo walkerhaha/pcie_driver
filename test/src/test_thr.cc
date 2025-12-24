@@ -348,7 +348,7 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 	}
 
 	//if(ch_num==0)
-	desc_addr = pcief_dmabuf_malloc(0x20000000);
+	//desc_addr = pcief_dmabuf_malloc(0x20000000);
 	start_wr_addr = pcief_dmabuf_malloc(len_m+1024);
 	start_rd_addr = pcief_dmabuf_malloc(len_m+1024);
 	//start_wr_addr_mmu = pcief_dmabuf_malloc(0x100000000);
@@ -461,7 +461,7 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 		}
 
 		//if(ch_num==0)
-		pcief_dmabuf_free(desc_addr);
+		//pcief_dmabuf_free(desc_addr);
 		pcief_dmabuf_free(start_wr_addr);
 		pcief_dmabuf_free(start_rd_addr);
 		//pcief_dmabuf_free(desc_addr_mmu);
