@@ -5,6 +5,7 @@
 #include "qy_intd_def.h"
 
 #define MTDMA_MMU 0
+#define VF_NUM 0
 
 #define PCI_VENDOR_ID_MT             (0x1ed5)
 #define PCI_DEVICE_ID_MT_QY_GPU      (0x0200)
@@ -40,7 +41,7 @@ enum {
 #define PF_NUM_MAX                   	2
 #define VF_NUM_MAX                   	60
 #ifndef VF_NUM	
-#define VF_NUM  60
+#define VF_NUM  0
 #endif
 
 #define IATU_NUM 50

@@ -45,6 +45,7 @@ mt_emu_mtdma-m += virt-dma.o
 all:	modules
 
 modules:
+	sed -i 's/\(VF_NUM[[:space:]]\+\)[0-9]\+/\1$(VF_NUM)/g' mt-emu-drv.h
 	$(MAKE) -C $(KERNELDIR) M=$$PWD modules
 
 modules_install:

@@ -15,9 +15,8 @@
 #include <sys/ioctl.h>
 #include <linux/types.h>
 
-#include "mt-emu-drv.h"
-#include "module_reg.h"
 #include "mt_pcie_f.h"
+#include "module_reg.h"
 
 #define MTDMA_BUF_BLK_SIZE              (4*1024)
 #define MTDMA_BUF_BLK_NUM               ((MTDMA_BUF_SIZE+MTDMA_BUF_BLK_SIZE-1)/MTDMA_BUF_BLK_SIZE) //one bit MTDMA_BLK_SIZE
@@ -689,7 +688,7 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 	printf(" dma_bare check = fun %d, ch %d \n", fun, ch_num);
 
 	int vf = (VF_NUM==0) ? 0 : 1;
-	printf(" vf all = fun %0x", vf); 
+	printf("vf num = %d", VF_NUM);
 
 	if(vf) {
 		if(ch_num >=0 && ch_num <VF_NUM) {
@@ -698,12 +697,10 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 			fun = F_GPU;
 		}
 	} else {
-		if(ch_num >= 0 && ch_num < F_NUM) {
-			fun = F_GPU;
-		}
+		fun = F_GPU;
 	}
 
-	printf(" dma_bare after change check = fun %d, ch %d \n", fun, ch_num);
+	printf("dma_bare after change check = fun %d, ch %d \n", fun, ch_num);
 
 	pcief_dmaisr_set(fun, 1);
 
