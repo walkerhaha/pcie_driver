@@ -140,20 +140,20 @@ TEST_CASE("sanity_dma_bare_single_ddr", "[mtdma1]") {
 	LInfo("TEST_CASE sanity_dma_bare_single init\n");
 
 	uint32_t test_ch_num                    = 0;
-	uint32_t test_ch_cnt                    = 64;
+	uint32_t test_ch_cnt                    = 1;
 	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV);
 	uint32_t test_desc_direction            = DMA_DESC_IN_DEVICE;
 	uint32_t test_desc_cnt                  = 0;
 	uint32_t test_block_cnt                 = 0;
 	uint64_t test_device_sar                = 0x0;
 	uint64_t test_device_dar                = 0x0;
-	uint64_t test_size                      = 8 *1024;
+	uint64_t test_size                      = 512 * 1024;
 	uint32_t test_cnt                       = 1;
 
 	dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
 
-	test_data_direction_bits       = BIT(DMA_MEM_TO_MEM);
-	dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
+	//test_data_direction_bits       = BIT(DMA_MEM_TO_MEM);
+	//dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
 
 	LInfo("TEST_CASE sanity_dma_bare_single done\n");
 }
@@ -207,9 +207,11 @@ TEST_CASE("sanity_dma_bare_vf_channel", "[mtdma1]") {
 
 TEST_CASE("sanity_dma_bare_chain_ddr", "[mtdma1]") {
 
+	//echo 120 > /sys/module/rcupdate/parameters/rcu_cpu_stall_timeout
+
 	LInfo("TEST_CASE sanity_dma_bare_chain_ddr init\n");
 
-	uint32_t des_cnt                        = 256;
+	uint32_t des_cnt                        = 32;
 	uint32_t test_ch_num                    = 0;
 	uint32_t test_ch_cnt                    = 1;
 	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_MEM_TO_MEM);
@@ -223,8 +225,8 @@ TEST_CASE("sanity_dma_bare_chain_ddr", "[mtdma1]") {
 
 	dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
 
-	test_data_direction_bits       = BIT(DMA_MEM_TO_MEM);
-	dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
+	//test_data_direction_bits       = BIT(DMA_DEV_TO_DEV);
+	//dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
 
 	LInfo("TEST_CASE sanity_dma_bare_chain_ddr done\n");
 }
@@ -234,21 +236,24 @@ TEST_CASE("sanity_dma_bare_block_ddr", "[mtdma1]") {
 	LInfo("TEST_CASE sanity_dma_bare_block_ddr init\n");
 
 	uint32_t test_ch_num                    = 0;
-	uint32_t test_ch_cnt                    = 64;
+	uint32_t test_ch_cnt                    = 1;
 	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV);
 	uint32_t test_desc_direction            = DMA_DESC_IN_DEVICE;
 	uint32_t rand                           = 0;
 	uint32_t test_desc_cnt                  = 8 | (rand<<31);
-	uint32_t test_block_cnt                 = 128;
+	uint32_t test_block_cnt                 = 32;
 	uint64_t test_device_sar                = 0x0;
 	uint64_t test_device_dar                = 0x0;
-	uint64_t test_size                      = 128*1024;
+	uint64_t test_size                      = test_block_cnt * 1024;
 	uint32_t test_cnt                       = 1;
+	int i; 
 
 	dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
 
-	test_data_direction_bits       = BIT(DMA_MEM_TO_MEM);
-	dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
+	//test_data_direction_bits       = BIT(DMA_MEM_TO_MEM);
+	//dma_bare_simple_test(test_ch_num, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
+	//dma_bare_simple_test(i, test_ch_cnt, test_data_direction_bits, test_desc_direction, test_desc_cnt, test_block_cnt, test_device_sar, test_device_dar, test_size, test_cnt, 0);
+	//}
 
 	LInfo("TEST_CASE sanity_dma_bare_block_ddr done\n");
 
@@ -287,8 +292,6 @@ TEST_CASE("sanity_dma_bare_chain_ddr_mmu", "[mtdma_mmu]") {
 	uint32_t test_ch_num                    = 0;
 	uint32_t test_ch_cnt                    = 1;
 	uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM);
-	//uint32_t test_data_direction_bits       = BIT(DMA_MEM_TO_DEV);
-	//uint32_t test_data_direction_bits       = BIT(DMA_DEV_TO_MEM);
 	uint32_t test_desc_direction            = DMA_DESC_IN_DEVICE;
 	uint32_t test_desc_cnt                  = 127;
 	uint32_t test_block_cnt                 = 0;

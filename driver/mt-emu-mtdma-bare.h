@@ -175,12 +175,15 @@ struct dma_ch_desc {
 
 void mtdma_comm_init(void __iomem * mtdma_comm_vaddr, int vf_num);
 void build_dma_info(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg_vaddr, void __iomem *ll_vaddr, u8 vf, u8 wr_ch_cnt, u8 rd_ch_cnt, struct mtdma_info *dma_info);
+/*
 #define build_vf_dma_info(rg_vaddr, ll_vaddr, dma_info) do {\
-	build_dma_info(NULL, 0, rg_vaddr, ll_vaddr, 1, 1, 1, dma_info); \
+       build_dma_info(NULL, 0, rg_vaddr, ll_vaddr, 1, 1, 1, dma_info); \
 } while(0)
 
+*/
+void build_dma_info_vf(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg_vaddr, void __iomem *ll_vaddr, struct mtdma_info *dma_info, int devfn);
 void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info);
-
+void mtdma_bare_init_vf(struct dma_bare *dma_bare, struct mtdma_info *info, int devfn);
 int dma_bare_isr(struct dma_bare_ch *bare_ch);
 int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t desc_direction, uint32_t desc_cnt, uint32_t block_cnt, uint64_t sar, uint64_t dar, uint32_t size, uint32_t ch_num, uint32_t timeout_ms);
 

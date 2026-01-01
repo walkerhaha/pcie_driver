@@ -343,8 +343,9 @@ static int pcie_emu_vgpu_probe(struct pci_dev *pcid, const struct pci_device_id 
     	goto error;
 	}
 
-	build_vf_dma_info(emu_pcie->region[BAR_0].vaddr, emu_pcie->region[BAR_2].vaddr, &dma_info);
-	mtdma_bare_init(&emu_pcie->dma_bare, &dma_info);
+	build_dma_info_vf(NULL, 0, emu_pcie->region[BAR_0].vaddr, emu_pcie->region[BAR_2].vaddr, &dma_info, pcid->devfn);
+
+	mtdma_bare_init_vf(&emu_pcie->dma_bare, &dma_info, pcid->devfn);
 
 	if( 0 != emu_mtdma_init(&emu_pcie->emu_mtdma, pcid, &dma_info))
 	{

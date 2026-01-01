@@ -116,6 +116,49 @@ void build_dma_info(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg_va
 	}
 }
 
+
+void build_dma_info_vf(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg_vaddr, void __iomem *ll_vaddr, struct mtdma_info *dma_info, int devfn)
+{
+	struct mtdma_chan_info *chan_info;
+	off_t off,off_system;
+	u32 ll_sz;
+	int ch, i;
+
+	dma_info->wr_ch_cnt = 1;
+	dma_info->rd_ch_cnt = 1;
+	ch = devfn - 2;
+	pr_info("%s, devfn :%d, ch :%d\n", __func__, devfn, ch);
+
+	for(i =0; i<2; i++) {
+		if (i == 0) {
+			chan_info = dma_info->wr_ch_info;
+			off = 0x80000000;
+			off_system = 0;
+		}
+		else {
+			chan_info = dma_info->rd_ch_info;
+			off = 0x80000000 + 64 * 65536 * 32;
+			off_system = 65536 * 32;
+		}
+
+		ll_sz = 65536*32;
+
+		chan_info[ch].ll_max = 65536;
+		chan_info[ch].ll_laddr = ll_sz * ch + off;
+		chan_info[ch].ll_vaddr = ll_vaddr + chan_info[ch].ll_laddr;
+		chan_info[ch].ll_vaddr_system = mtdma_vaddr + off_system + ll_sz * ch;
+		chan_info[ch].ll_laddr_system = 0x000000000000 + off_system + ll_sz * ch;
+
+		chan_info[ch].rg_vaddr = rg_vaddr + (i == 0 ? 0x3000 + 0x800 : 0x3000);
+
+		pr_info("vf init %d, chan_info[ch].rg_vaddr :0x%llx\n", devfn, chan_info[ch].rg_vaddr);
+
+		pr_info("chan_info vf :%d wr-rd(%d) ch %d: rg_vaddr=%px, ll_max=%x, ll_laddr=%llx, ll_vaddr=%px}\n", devfn,
+			i, ch, chan_info[ch].rg_vaddr, chan_info[ch].ll_max, chan_info[ch].ll_laddr, chan_info[ch].ll_vaddr);
+	}
+}
+
+
 void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 	int i;
 
@@ -147,6 +190,37 @@ void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 		if(GET_CH_32(chan, REG_DMA_CH_INTR_RAW)) {
 			SET_CH_32(chan, REG_DMA_CH_INTR_RAW, GET_CH_32(chan, REG_DMA_CH_INTR_RAW));
 		}
+	}
+}
+
+void mtdma_bare_init_vf(struct dma_bare *dma_bare, struct mtdma_info *info, int devfn) {
+	int i;
+	int ch = devfn - 2;
+	struct dma_bare_ch  *chan;
+
+	dma_bare->wr_ch_cnt = info->wr_ch_cnt;
+	dma_bare->rd_ch_cnt = info->rd_ch_cnt;
+
+	pr_info("bare init dma_bare->wr_ch_cnt :%d\n", dma_bare->wr_ch_cnt);
+	pr_info("bare init dma_bare->rd_ch_cnt :%d\n", dma_bare->rd_ch_cnt);
+
+
+	chan= &dma_bare->wr_ch[0];
+	chan->info = info->wr_ch_info[ch];
+	init_completion(&chan->int_done);
+	mutex_init(&chan->int_mutex);
+
+	if(GET_CH_32(chan, REG_DMA_CH_INTR_RAW)) {
+		SET_CH_32(chan, REG_DMA_CH_INTR_RAW, GET_CH_32(chan, REG_DMA_CH_INTR_RAW));
+	}
+
+	chan = &dma_bare->rd_ch[0];
+	chan->info = info->rd_ch_info[ch];
+	init_completion(&chan->int_done);
+	mutex_init(&chan->int_mutex);
+
+	if(GET_CH_32(chan, REG_DMA_CH_INTR_RAW)) {
+		SET_CH_32(chan, REG_DMA_CH_INTR_RAW, GET_CH_32(chan, REG_DMA_CH_INTR_RAW));
 	}
 }
 
@@ -309,7 +383,6 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 		SET_LL_32(lli, sar.msb, upper_32_bits(sar));
 		SET_LL_32(lli, dar.lsb, lower_32_bits(dar));
 		SET_LL_32(lli, dar.msb, upper_32_bits(dar));
-
 		if( direction > 3) {
 			dummy_addr_H = GET_CH_32(bare_ch, REG_DUMMY_CH_ADDR_H);
 			dummy_addr_L = GET_CH_32(bare_ch, REG_DUMMY_CH_ADDR_L);	
@@ -334,7 +407,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 			void* desc_size;
 		
 			pr_info("Max kmalloc size: 0x%x bytes\n", KMALLOC_MAX_SIZE);
-			desc_size = kvmalloc(1024 * 1024 * 4, GFP_KERNEL);
+			desc_size = kmalloc(1024 * 1024, GFP_KERNEL);
 			if(!desc_size)
 				printk("desc_size kmalloc failed\n");
 			if(rand_flag==1) {
@@ -383,15 +456,18 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 					SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, addr_type);
 #endif
 					lli = bare_ch->info.rg_vaddr + REG_DMA_CH_DESC_OPT;
+					pr_info("bare_ch->info.rg_vaddr  :0x%llx\n", (unsigned long long)bare_ch->info.rg_vaddr);
 					u32 ch_lbar_basic = (desc_cnt_tmp<<16) | chain_en;
 					SET_CH_32(bare_ch, REG_DMA_CH_LBAR_BASIC,ch_lbar_basic);
 				}
 				else {
-					if(desc_direction==DMA_DESC_IN_DEVICE)
+					if(desc_direction==DMA_DESC_IN_DEVICE) {
 						lli = &(((struct dma_ch_desc *)bare_ch->info.ll_vaddr)[i-1]);
-					else
+						//pr_info("i:%d bare_ch->info.ll_vaddr[i-1] :0x%llx\n", i-1, (unsigned long long)lli);
+						//pr_info("i :%d lli->desc_op :0x%llx\n", i-1, (unsigned long long)&lli->desc_op);
+					} else {
 						lli = (struct dma_ch_desc *)(bare_ch->info.ll_vaddr_system + (i-1) * sizeof(struct dma_ch_desc));
-					//lli_rw[i-1] = lli;
+					}
 				}
 
 				if(desc_direction==DMA_DESC_IN_DEVICE)
@@ -431,7 +507,7 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 				printk("dummy addr H:%x\n",dummy_addr_H);
 				printk("dummy addr L:%x\n",dummy_addr_L);
 			}
-			kvfree(desc_size);
+			kfree(desc_size);
 		} 
 
 		/////////////////--------block type-------//////////////////////

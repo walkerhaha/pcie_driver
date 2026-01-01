@@ -136,7 +136,7 @@ static struct pcie_f_fun *pcief_get_instance(uint8_t fun) {
 	//printf("fun=%x, f=%x, size=%llx\n",fun, g_pcief.fun[fun].f, g_pcief.fun[fun].bars[0].bar_size);
 	if( !g_pcief.fun[fun].f ) {
 		int f = pcief_open(fun);
-		//printf("f=%x\n",f);
+		//printf("f=%d fun :%d\n",f, fun);
 		if(f) {
 			for(int i=0; i<F_BAR_MAX; i++) {
 				char* bars_name[25];
@@ -680,18 +680,18 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 	long time_st, time_use;
 	float speed = (size*1000.0)/(1024*1024);
 	static const char* type_name[] = {"H2H", "H2D", "D2H", "D2D"};
-
+	int f;
 	if(data_direction >= DMA_TRANS_NONE)
 		return -1;
 
 	ch_bak = ch_num;
-	printf(" dma_bare check = fun %d, ch %d \n", fun, ch_num);
 
 	int vf = (VF_NUM==0) ? 0 : 1;
-	printf("vf num = %d", VF_NUM);
+
+	printf("dma_bare check = fun %d, ch %d vf_num :%d\n", fun, ch_num, VF_NUM);
 
 	if(vf) {
-		if(ch_num >=0 && ch_num <VF_NUM) {
+		if(ch_num >=0 && ch_num < VF_NUM) {
 			fun = ch_num + 2;
 		} else {
 			fun = F_GPU;
@@ -717,8 +717,10 @@ int pcief_dma_bare_xfer(uint32_t data_direction, uint32_t desc_direction, uint32
 	emu_param->d0 = sizeof(struct dma_bare_rw);
 
 	time_st = time_get_ms();
+	f = pcief_get_instance(fun)->f;
 
-	ret = ioctl(pcief_get_instance(fun)->f, MT_IOCTL_MTDMA_BARE_RW, emu_param);
+	printf("pcief_dma_bare_xfer get f :%d\n",f);
+	ret = ioctl(f,  MT_IOCTL_MTDMA_BARE_RW, emu_param);
 	if (ret != 0) {
 		printf("%s%d: xfer ioctl error\n", type_name[data_direction], ch_bak);
 		return -1;

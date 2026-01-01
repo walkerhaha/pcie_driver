@@ -838,7 +838,7 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 	//spin_lock(&emu_pcie->irq_lock);
 	//mutex_lock(&emu_pcie->int_mutex[irq]);
 
-	dev_info(&emu_pcie->pcid->dev,"received vgpu intr %d from func %d\n",irq, emu_pcie->devfn);
+	dev_info(&emu_pcie->pcid->dev,"received vgpu intr %d from pcie fun %d\n",irq, emu_pcie->devfn);
 
 	if(emu_pcie->irq_test_mode) {
 		uint32_t rdata = readl(emu_pcie->region[0].vaddr + VPU_REG_PCIE_VF_INT_MUX_TARGET_SOFT(irq));
@@ -880,7 +880,7 @@ void pcie_vgpu_th(int irq, struct emu_pcie *emu_pcie)
 		if(ret==0)
 			complete(&emu_pcie->int_done[irq]);
 	} else {
-		pr_info("enter vf interrupt, not in test irq mode, irq :%d\n", irq);
+		pr_info("enter vf interrupt, in mtdma mode, irq :%d\n", irq);
 		if (irq == 3 || irq == 2) {
 			emu_dma_isr(emu_pcie, 0);
 			pr_info("dma vgpu irq %d done\n", irq);
@@ -899,7 +899,7 @@ irqreturn_t pcie_th(int irq_nr, void *t) {
 	struct emu_pcie *emu_pcie = t;
 	int irq = irq_nr - emu_pcie->irq_vector;
 
-	pr_info("pcie pcie_th irq_nr :%d emu_pcie->irq_vector :%d vf_num :%d\n", irq_nr, emu_pcie->irq_vector, emu_pcie->vf_num);
+	pr_info("pcie_th irq :%d irq_nr :%d emu_pcie->irq_vector :%d vf_num :%d\n",irq,  irq_nr, emu_pcie->irq_vector, emu_pcie->vf_num);
 	spin_lock(&emu_pcie->irq_lock);
 	switch(emu_pcie->type) {
 		case MT_EMU_TYPE_APU:
@@ -957,7 +957,7 @@ int irq_init(struct emu_pcie *emu_pcie, int type, int test_mode) {
 			ph_vectors_max = QY_AUD_VECTORS;
 		}else if(emu_pcie->type==MT_EMU_TYPE_VGPU) {
 			ret = pci_alloc_irq_vectors(emu_pcie->pcid, 1, QY_VPU_VECTORS, type);
-			pr_info("VGPU %s %d ret :%d\n", __func__,  __LINE__, ret);
+			pr_info("VGPU fun: %s line :%d vec_num :%d, devfn :%d\n", __func__,  __LINE__, ret, emu_pcie->devfn);
 			ph_vectors_max = QY_VPU_VECTORS;
 		}
 	}
@@ -970,7 +970,6 @@ int irq_init(struct emu_pcie *emu_pcie, int type, int test_mode) {
 	emu_pcie->irq_test_mode = test_mode;
 	emu_pcie->irq_type = type;
 	emu_pcie->vec_num = ret;
-	dev_info(&emu_pcie->pcid->dev, "vec_num = %d\n", emu_pcie->vec_num);
 
 	switch(emu_pcie->type) {
 		case MT_EMU_TYPE_VGPU:
@@ -1042,11 +1041,10 @@ int irq_init(struct emu_pcie *emu_pcie, int type, int test_mode) {
 			return ret;
 		}
 
-		//dev_info(&emu_pcie->pcid->dev,"intr num = %d\n",pci_irq_vector(emu_pcie->pcid, i));
+		dev_info(&emu_pcie->pcid->dev,"intr num = %d\n",pci_irq_vector(emu_pcie->pcid, i));
 		emu_pcie->irq_allocated[i] = true;
 	}
 
-	//for(i=0; i<emu_pcie->vec_num; i++) {
 	for(i=0; i<ph_vectors_max; i++) {
 		reinit_completion(&emu_pcie->int_done[i]);
 	}
