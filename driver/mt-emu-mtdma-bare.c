@@ -102,14 +102,7 @@ void build_dma_info(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg_va
 			chan_info[i].ll_vaddr_system = mtdma_vaddr + off_system + ll_sz * i;
 			chan_info[i].ll_laddr_system = 0x000000000000 + off_system + ll_sz * i;
 
-			if(vf) {
-				chan_info[i].rg_vaddr = rg_vaddr + (j == 0 ? 0x3000 + 0x800 : 0x3000);
-				pr_info("vf init %d, chan_info[i].rg_vaddr :0x%llx\n", j, chan_info[i].rg_vaddr);
-			}
-			else {
-				chan_info[i].rg_vaddr = rg_vaddr + (j == 0 ? 0x383000 + 0x1000 * i + 0x800 : 0x383000 + 0x1000 * i);
-			}
-
+			chan_info[i].rg_vaddr = rg_vaddr + (j == 0 ? 0x383000 + 0x1000 * i + 0x800 : 0x383000 + 0x1000 * i);
 			//pr_debug("chan_info vf(%d) wr(%d) ch %d: rg_vaddr=%px, ll_max=%x, ll_laddr=%llx, ll_vaddr=%px}\n", vf ? 1 : 0,
 			//	j, i, chan_info[i].rg_vaddr, chan_info[i].ll_max, chan_info[i].ll_laddr, chan_info[i].ll_vaddr);
 		}
@@ -126,22 +119,21 @@ void build_dma_info_vf(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg
 
 	dma_info->wr_ch_cnt = 1;
 	dma_info->rd_ch_cnt = 1;
-	ch = devfn - 2;
-	pr_info("%s, devfn :%d, ch :%d\n", __func__, devfn, ch);
 
-	for(i =0; i<2; i++) {
+	ch = devfn - 2;
+
+	for(i = 0; i < 2; i++) {
 		if (i == 0) {
 			chan_info = dma_info->wr_ch_info;
 			off = 0x80000000;
 			off_system = 0;
-		}
-		else {
+		} else {
 			chan_info = dma_info->rd_ch_info;
-			off = 0x80000000 + 64 * 65536 * 32;
+			off = 0x80000000 + PCIE_DMA_CH_NUM * 65536 * 32;
 			off_system = 65536 * 32;
 		}
 
-		ll_sz = 65536*32;
+		ll_sz = 65536 * 32;
 
 		chan_info[ch].ll_max = 65536;
 		chan_info[ch].ll_laddr = ll_sz * ch + off;
@@ -151,13 +143,11 @@ void build_dma_info_vf(void *mtdma_vaddr, uint64_t mtdma_paddr, void __iomem *rg
 
 		chan_info[ch].rg_vaddr = rg_vaddr + (i == 0 ? 0x3000 + 0x800 : 0x3000);
 
-		pr_info("vf init %d, chan_info[ch].rg_vaddr :0x%llx\n", devfn, chan_info[ch].rg_vaddr);
-
-		pr_info("chan_info vf :%d wr-rd(%d) ch %d: rg_vaddr=%px, ll_max=%x, ll_laddr=%llx, ll_vaddr=%px}\n", devfn,
-			i, ch, chan_info[ch].rg_vaddr, chan_info[ch].ll_max, chan_info[ch].ll_laddr, chan_info[ch].ll_vaddr);
+		pr_info("%s, fun :%d wr-rd(%d) ch :%d rg_vaddr=%llx, ll_max=%x, ll_laddr=%llx, ll_vaddr=%llx ll_size :0x%x\n",
+				__func__, devfn, i, ch, (unsigned long long)chan_info[ch].rg_vaddr, chan_info[ch].ll_max,
+				(unsigned long long)chan_info[ch].ll_laddr, (unsigned long long)chan_info[ch].ll_vaddr, ll_sz);
 	}
 }
-
 
 void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 	int i;
@@ -169,7 +159,7 @@ void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 	pr_info("dma_bare->rd_ch_cnt :%d\n", dma_bare->rd_ch_cnt);
 
 	for(i = 0; i < info->wr_ch_cnt; i++) {
-		struct dma_bare_ch   *chan = &dma_bare->wr_ch[i];
+		struct dma_bare_ch *chan = &dma_bare->wr_ch[i];
 
 		chan->info = info->wr_ch_info[i];
 		init_completion(&chan->int_done);
@@ -180,8 +170,8 @@ void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info) {
 		}
 	}
 
-	for(i=0; i<info->rd_ch_cnt; i++) {
-		struct dma_bare_ch   *chan = &dma_bare->rd_ch[i];
+	for(i = 0; i < info->rd_ch_cnt; i++) {
+		struct dma_bare_ch *chan = &dma_bare->rd_ch[i];
 
 		chan->info = info->rd_ch_info[i];
 		init_completion(&chan->int_done);
@@ -201,8 +191,8 @@ void mtdma_bare_init_vf(struct dma_bare *dma_bare, struct mtdma_info *info, int 
 	dma_bare->wr_ch_cnt = info->wr_ch_cnt;
 	dma_bare->rd_ch_cnt = info->rd_ch_cnt;
 
-	pr_info("bare init dma_bare->wr_ch_cnt :%d\n", dma_bare->wr_ch_cnt);
-	pr_info("bare init dma_bare->rd_ch_cnt :%d\n", dma_bare->rd_ch_cnt);
+	pr_info("%s devfn :%d ch :%d dma_bare->wr_ch_cnt :%d dma_bare->rd_ch_cnt :%d\n",
+			devfn, ch, dma_bare->wr_ch_cnt, dma_bare->rd_ch_cnt);
 
 
 	chan= &dma_bare->wr_ch[0];
