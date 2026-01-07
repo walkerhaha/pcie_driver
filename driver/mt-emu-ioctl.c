@@ -551,6 +551,8 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				printk(KERN_INFO "7: %x\n", test_info.block_cnt);
 				printk(KERN_INFO "8: %x\n", test_info.data_direction);
 				*/
+
+				pr_info("ch :%d dma_bare_xfer src addr: 0x%llx dst addr: 0x%llx\n",bare_ch->chan_id, test_info.sar, test_info.dar);
 				emu_param.b0 = dma_bare_xfer(bare_ch, test_info.data_direction, test_info.desc_direction, test_info.desc_cnt, test_info.block_cnt, test_info.sar, test_info.dar, test_info.size, test_info.ch_num, test_info.timeout_ms);
 
 				ret = copy_to_user((void __user *)arg, &emu_param, sizeof(emu_param));
