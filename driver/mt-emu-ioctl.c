@@ -811,7 +811,7 @@ void pcie_gpu_th(int irq, struct emu_pcie *emu_pcie)
 
 		complete(&emu_pcie->int_done[irq]);
 	}else {
-		pr_info("mtdma is not in irq_test_mode irq :%d\n", irq);
+		pr_info("mtdma work mode irq :%d\n", irq);
 		uint32_t int_reg = readl(emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		writel(0x10000|int_reg, emu_pcie->region[0].vaddr + REG_PCIE_PF_INT_MUX_TARGET_SOFT(irq));
 		//readl(emu_pcie->region[0].vaddr + 0x681800+irq*4);

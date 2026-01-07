@@ -326,7 +326,6 @@ int host_mem_wr(uint64_t len) {
 	return 0;
 }
 
-
 static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, uint32_t desc_cnt, uint32_t block_cnt, uint32_t ch_num, uint64_t device_sar, uint64_t device_dar, uint64_t len, int cnt, int timeout_ms, int offset) {
 	uint32_t offset_rd_host=offset;
 	uint32_t offset_wr_host=offset;
@@ -356,12 +355,13 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 	//desc_addr_mmu = pcief_dmabuf_malloc(0x200000);
 
 
-	//if(ch_num==0)
-	//REQUIRE(-1 != desc_addr);
 	REQUIRE(-1 != start_wr_addr);
 	REQUIRE(-1 != start_rd_addr);
 
-	LInfo("MTDMA{:d} start_wr_addr {:8X}, start_rd_addr {:8X} size {:x} {:x}\n", ch_num, start_wr_addr, start_rd_addr, len, len_m);
+	printf("ch :%d device_sar :0x%llx device_dar :0x%llx\n", device_sar, device_dar);
+
+	LInfo("MTDMA_ch_{:d} start_wr_addr 0x{:8X}, start_rd_addr 0x{:8X} size 0x{:x} 0x{:x}\n"
+			ch_num, start_wr_addr, start_rd_addr, len, len_m);
 
 	if(timeout_ms < 1000)
 		timeout_ms = 1000;
@@ -376,15 +376,16 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 		uint32_t val;
 		long time_st, time_use;
 
-
 		prepare_pattern(data_direction_bits, (void *)vsar, len_m);
 
 		if(data_direction_bits == BIT(DMA_MEM_TO_MEM)) {
-			printf("\n****************\n");
-			LInfo("H2H ch{:d} test_cnt{:d} xfer s: sar_base {:8X}, sar_offset {:8X}, dar_base {:8X}, dar_offset {:8X}, size {:x}, pattern {:x}\n", ch_num, j, mtdma_paddr, start_rd_addr+offset_rd_host, mtdma_paddr, start_wr_addr+offset_wr_host, size, ((uint32_t *)vsar)[0]);
+			printf("\n*******DMA_MEM_TO_MEM*********\n");
+			LInfo("H2H ch{:d} test_cnt{:d} xfer: sar_base 0x{:8X}, sar_offset 0x{:8X}, dar_base 0x{:8X}, dar_offset 0x{:8X}, size 0x{:x}, pattern 0x{:x}\n",
+				 ch_num, j, mtdma_paddr, start_rd_addr+offset_rd_host, mtdma_paddr, start_wr_addr+offset_wr_host, size, ((uint32_t *)vsar)[0]);
 
 			time_st = time_get_ms();
 
+			printf("mtdma DMA_MEM_TO_MEM ch :%d host src :0x%llx host dst :0x%llx size :0x%x\n",ch_num, start_rd_addr+offset_rd_host, start_wr_addr+offset_wr_host, size);
 			if( 0 != pcief_dma_bare_xfer(DMA_MEM_TO_MEM, desc_direction, desc_cnt, block_cnt, ch_num, 0x00000000000+start_rd_addr+offset_rd_host, 0x00000000000+start_wr_addr+offset_wr_host, size, timeout_ms) ) {
 				ret = -1;
 				break;
@@ -397,11 +398,13 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 
 
 		if(data_direction_bits & BIT(DMA_MEM_TO_DEV)) {
-			printf("\n****************\n");
-			LInfo("H2D ch{:d} test_cnt{:d} xfer s: sar_base {:8X}, sar_offset {:8X}, dar {:8X}, size {:x}, pattern {:x}\n", ch_num, j, mtdma_paddr, start_rd_addr+offset_rd_host, device_sar, size, ((uint32_t *)vsar)[0]);
+			printf("\n********DMA_MEM_TO_DEV********\n");
+			LInfo("H2D ch{:d} test_cnt{:d} xfer: sar_base 0x{:8X}, sar_offset 0x{:8X}, dar 0x{:8X}, size 0x{:x}, pattern 0x{:x}\n",
+				  ch_num, j, mtdma_paddr, start_rd_addr+offset_rd_host, device_sar, size, ((uint32_t *)vsar)[0]);
 
 			time_st = time_get_ms();
 
+			printf("mtdma DMA_MEM_TO_DEV ch :%d host src :0x%llx device dst :0x%llx size :0x%x\n", ch_num, start_rd_addr+offset_rd_host, devie_sar, size);
 			if( 0 != pcief_dma_bare_xfer(DMA_MEM_TO_DEV, desc_direction, desc_cnt, block_cnt, ch_num, 0x00000000000+start_rd_addr+offset_rd_host, device_sar, size, timeout_ms) ) {
 				ret = -1;
 				break;
@@ -413,11 +416,13 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 		}
 
 		if(data_direction_bits & BIT(DMA_DEV_TO_DEV)) {
-			printf("\n****************\n");
-			LInfo("D2D ch{:d} test_cnt{:d} xfer s: sar {:8X}, dar {:8X}, size {:x}\n", ch_num, j, device_sar, device_dar, size);
+			printf("\n********DMA_DEV_TO_DEV********\n");
+			LInfo("D2D ch{:d} test_cnt{:d} xfer: sar 0x{:8X}, dar 0x{:8X}, size 0x{:x}\n",
+				   ch_num, j, device_sar, device_dar, size);
 
 			time_st = time_get_ms();
 
+			printf("mtdma DMA_DEV_TO_DEV ch :%d dev src :0x%llx dev dst :0x%llx size :0x%x\n", ch_num, device_sar, device_dar, size);
 			if( 0 != pcief_dma_bare_xfer(DMA_DEV_TO_DEV, desc_direction, desc_cnt, block_cnt, ch_num, device_sar, device_dar, size, timeout_ms) ) {
 				ret = -1;
 				break;
@@ -430,11 +435,13 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 
 
 		if(data_direction_bits & BIT(DMA_DEV_TO_MEM)) {
-			printf("\n****************\n");
-			LInfo("D2H ch{:d} test_cnt{:d} xfer s: sar {:8X}, dar_base {:8X}, dar_offset {:8X}, size {:x}\n", ch_num, j, device_dar, mtdma_paddr, start_wr_addr+offset_wr_host, size);
+			printf("\n*********DMA_DEV_TO_MEM*******\n");
+			LInfo("D2H ch{:d} test_cnt{:d} xfer: sar 0x{:8X}, dar_base 0x{:8X}, dar_offset 0x{:8X}, size 0x{:x}\n",
+				  ch_num, j, device_dar, mtdma_paddr, start_wr_addr+offset_wr_host, size);
 
 			time_st = time_get_ms();
 
+			printf("mtdma DMA_DEV_TO_MEM ch:%d host dev src :0x%llx host dst :0x%llx size :0x%x\n",ch_num, devie_dar, start_wr_addr+offset_wr_host, size);
 			if( 0 != pcief_dma_bare_xfer(DMA_DEV_TO_MEM, desc_direction, desc_cnt, block_cnt, ch_num, device_dar, 0x00000000000+start_wr_addr+offset_wr_host, size, timeout_ms) ) {
 				ret = -1;
 				break;
@@ -444,7 +451,7 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 			time_use_wr += time_use;
 			LInfo("D2H ch{:d} test_cnt{:d} xfer {:x} done: ms {:d} speed {:3.3f}MB/s\n", ch_num, j, size, time_use, size*SPEED_CAL/time_use);
 
-			LInfo("rd_data {:x}\n", ((uint32_t *)vdar)[0]);
+			LInfo("rd_data 0x{:x}\n", ((uint32_t *)vdar)[0]);
 		}
 
 		if(0 != compare_pattern(data_direction_bits, (void*)vsar, (void*)vdar, device_sar, size)) {			
@@ -460,7 +467,6 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 			REQUIRE ( 0 == ret );
 		}
 
-		//if(ch_num==0)
 		//pcief_dmabuf_free(desc_addr);
 		pcief_dmabuf_free(start_wr_addr);
 		pcief_dmabuf_free(start_rd_addr);
