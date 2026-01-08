@@ -191,8 +191,8 @@ void mtdma_bare_init_vf(struct dma_bare *dma_bare, struct mtdma_info *info, int 
 	dma_bare->wr_ch_cnt = info->wr_ch_cnt;
 	dma_bare->rd_ch_cnt = info->rd_ch_cnt;
 
-	pr_info("%s devfn :%d ch :%d dma_bare->wr_ch_cnt :%d dma_bare->rd_ch_cnt :%d\n",
-			devfn, ch, dma_bare->wr_ch_cnt, dma_bare->rd_ch_cnt);
+	pr_info("%s, devfn :%d ch :%d dma_bare->wr_ch_cnt :%d dma_bare->rd_ch_cnt :%d\n",
+			__func__, devfn, ch, dma_bare->wr_ch_cnt, dma_bare->rd_ch_cnt);
 
 
 	chan= &dma_bare->wr_ch[0];
