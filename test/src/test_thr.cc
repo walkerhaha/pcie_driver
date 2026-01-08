@@ -360,8 +360,8 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 
 	printf("ch :%d device_sar :0x%llx device_dar :0x%llx\n", device_sar, device_dar);
 
-	LInfo("MTDMA_ch_{:d} start_wr_addr 0x{:8X}, start_rd_addr 0x{:8X} size 0x{:x} 0x{:x}\n"
-			ch_num, start_wr_addr, start_rd_addr, len, len_m);
+	LInfo("MTDMA_ch_{:d} start_wr_addr 0x{:8X}, start_rd_addr 0x{:8X} size 0x{:x} 0x{:x}\n",
+	      ch_num, start_wr_addr, start_rd_addr, len, len_m);
 
 	if(timeout_ms < 1000)
 		timeout_ms = 1000;
@@ -404,7 +404,7 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 
 			time_st = time_get_ms();
 
-			printf("mtdma DMA_MEM_TO_DEV ch :%d host src :0x%llx device dst :0x%llx size :0x%x\n", ch_num, start_rd_addr+offset_rd_host, devie_sar, size);
+			printf("mtdma DMA_MEM_TO_DEV ch :%d host src :0x%llx device dst :0x%llx size :0x%x\n", ch_num, start_rd_addr+offset_rd_host, device_sar, size);
 			if( 0 != pcief_dma_bare_xfer(DMA_MEM_TO_DEV, desc_direction, desc_cnt, block_cnt, ch_num, 0x00000000000+start_rd_addr+offset_rd_host, device_sar, size, timeout_ms) ) {
 				ret = -1;
 				break;
@@ -441,7 +441,7 @@ static int test_dma_bare(uint32_t data_direction_bits, uint32_t desc_direction, 
 
 			time_st = time_get_ms();
 
-			printf("mtdma DMA_DEV_TO_MEM ch:%d host dev src :0x%llx host dst :0x%llx size :0x%x\n",ch_num, devie_dar, start_wr_addr+offset_wr_host, size);
+			printf("mtdma DMA_DEV_TO_MEM ch:%d host dev src :0x%llx host dst :0x%llx size :0x%x\n",ch_num, device_dar, start_wr_addr+offset_wr_host, size);
 			if( 0 != pcief_dma_bare_xfer(DMA_DEV_TO_MEM, desc_direction, desc_cnt, block_cnt, ch_num, device_dar, 0x00000000000+start_wr_addr+offset_wr_host, size, timeout_ms) ) {
 				ret = -1;
 				break;
