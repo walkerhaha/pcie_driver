@@ -445,14 +445,14 @@ int dma_bare_xfer(struct dma_bare_ch *bare_ch, uint32_t data_direction, uint32_t
 					SET_CH_32(bare_ch, REG_DMA_CH_MMU_ADDR_TYPE, addr_type);
 #endif
 					lli = bare_ch->info.rg_vaddr + REG_DMA_CH_DESC_OPT;
-					pr_info("bare_ch->info.rg_vaddr  :0x%llx\n", (unsigned long long)bare_ch->info.rg_vaddr);
+					pr_info("i : 0 bare_ch->info.rg_vaddr  :0x%llx\n", (unsigned long long)bare_ch->info.rg_vaddr);
 					u32 ch_lbar_basic = (desc_cnt_tmp<<16) | chain_en;
 					SET_CH_32(bare_ch, REG_DMA_CH_LBAR_BASIC,ch_lbar_basic);
 				} else {
 					if(desc_direction==DMA_DESC_IN_DEVICE) {
 						lli = &(((struct dma_ch_desc *)bare_ch->info.ll_vaddr)[i-1]);
 						pr_info("i :%d  ll_vaddr :0x%llx  ll_laddr :0x%llx\n",
-								i-1, (unsigned long long)lli, bare_ch->info.ll_laddr);
+								i, (unsigned long long)lli, bare_ch->info.ll_laddr);
 						//pr_info("i :%d lli->desc_op :0x%llx\n", i-1, (unsigned long long)&lli->desc_op);
 					} else {
 						lli = (struct dma_ch_desc *)(bare_ch->info.ll_vaddr_system + (i-1) * sizeof(struct dma_ch_desc));
