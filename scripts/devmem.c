@@ -12,8 +12,9 @@ int main(int argc, char **argv)
 {
 	int fd;
 	void *map_base, *virt_addr;
-	unsigned int value, reg;
-
+	unsigned long long  reg;
+	unsigned int value;
+	int i = 0;
 	switch (argc) {
 	case 3:
 		if (strcmp(argv[1], "-r")) {
@@ -35,6 +36,7 @@ int main(int argc, char **argv)
 	}
 
 	reg = strtol(argv[2], NULL, 16);
+	printf("addr : 0x%llx\n", reg);
 
 	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) <0) {
 		perror("open");
@@ -45,12 +47,17 @@ int main(int argc, char **argv)
 
 	virt_addr = map_base + (reg & MAP_MASK);
 	if (argc == 3) {
-		value = *(unsigned int *) virt_addr;
-		printf("reg :0x%x \nvalue:0x%x \n", reg, value);
+		for (i = 0; i < 64; i++) {
+			value = *((unsigned int *) virt_addr + i);
+			printf("i:%-3d, value :0x%x\n", i, value);
+		}
 	} else if (argc == 4) {
 		value = strtol(argv[3], NULL, 16);
-		*(unsigned int *) virt_addr = value;
-		printf("reg :0x%x \nvalue: 0x%x \n", reg, *(unsigned int*)virt_addr);
+
+		for (i = 0; i < 64; i++) {
+			*((unsigned int *) virt_addr + i) = value;
+			printf("i:%-3d value: 0x%x\n", i, *((unsigned int*)virt_addr + i));
+		}
 	}
 
 	munmap(map_base,MAP_SIZE);
