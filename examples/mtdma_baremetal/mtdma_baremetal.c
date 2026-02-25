@@ -28,7 +28,8 @@ MODULE_LICENSE("GPL v2");
 /* 测试传输大小：64 KB */
 #define XFER_SIZE  (64 * 1024)
 
-/* 设备本地（DDR）目标地址：放在设备 DDR 偏移 0x100000 处，避开链表区 */
+/* 设备本地（DDR）目标地址：放在设备 DDR 偏移 0x100000 处，
+ * 位于数据区（0x00000000-0x6fffffff），远离链表区（0x70000000-0x7fffffff）*/
 #define DEVICE_TEST_ADDR  0x100000ULL
 
 /* =========================================================
@@ -83,8 +84,8 @@ static void mtdma_comm_init(struct mtdma_dev *mdev)
  * 计算各通道的 MMIO 基地址（rg_base）并初始化软件同步对象。
  *
  * 寄存器地址计算规则（来自 build_dma_info()）：
- *   RD 通道 N：BAR0 + 0x383000 + N * 0x1000
- *   WR 通道 N：BAR0 + 0x383000 + N * 0x1000 + 0x800
+ *   RD 通道 N：BAR0 + 0x33000 + N * 0x1000
+ *   WR 通道 N：BAR0 + 0x33000 + N * 0x1000 + 0x800
  * ========================================================= */
 static void mtdma_chan_init(struct mtdma_dev *mdev)
 {
