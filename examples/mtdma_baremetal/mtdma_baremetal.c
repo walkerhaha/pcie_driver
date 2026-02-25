@@ -83,8 +83,8 @@ static void mtdma_comm_init(struct mtdma_dev *mdev)
  * 计算各通道的 MMIO 基地址（rg_base）并初始化软件同步对象。
  *
  * 寄存器地址计算规则（来自 build_dma_info()）：
- *   RD 通道 N：BAR0 + 0x383000 + N * 0x1000
- *   WR 通道 N：BAR0 + 0x383000 + N * 0x1000 + 0x800
+ *   RD 通道 N：BAR0 + 0x33000 + N * 0x1000
+ *   WR 通道 N：BAR0 + 0x33000 + N * 0x1000 + 0x800
  * ========================================================= */
 static void mtdma_chan_init(struct mtdma_dev *mdev)
 {

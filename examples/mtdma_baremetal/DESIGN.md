@@ -24,13 +24,13 @@ Device→Host（D2H）数据搬运。
 主机（x86）                                   MT EMU 设备
  ┌────────────────┐   PCIe 链路    ┌──────────────────────────────────────┐
  │  内核空间       │◄──────────────►│  BAR0  控制寄存器（64MB MMIO）        │
- │  DMA 缓冲区     │                │    0x380000  DMA 公共寄存器区          │
- │  (物理内存)     │                │    0x383000  DMA 通道寄存器区          │
- └────────────────┘                │  BAR2  设备 DDR 访问窗口（MMIO 透传）  │
-                                   │    偏移即为设备 DDR 物理地址           │
+ │  DMA 缓冲区     │                │    0x30000   DMA 公共寄存器区          │
+ │  (物理内存)     │                │    0x33000   DMA 通道寄存器区          │
+ └────────────────┘                │  BAR2  设备 DDR 访问窗口              │
+                                   │    窗口范围：0x00000000–0x7fffffff    │
                                    │  设备 DDR（硬件内存）                  │
                                    │    0x100000  本示例测试数据区          │
-                                   │    0x80000000+  DMA 链表区（未使用）   │
+                                   │    0x80000000+  超出 BAR2 访问窗口    │
                                    └──────────────────────────────────────┘
 ```
 
@@ -50,7 +50,7 @@ Device→Host（D2H）数据搬运。
 ### 3.1 公共寄存器（全局控制）
 
 ```
-comm_base = BAR0_vaddr + 0x380000
+comm_base = BAR0_vaddr + 0x30000
 ```
 
 | 寄存器 | 偏移（相对 comm_base） | 作用 |
@@ -70,15 +70,15 @@ comm_base = BAR0_vaddr + 0x380000
 ### 3.2 通道寄存器地址
 
 ```
-RD 通道 N：rg_base = BAR0_vaddr + 0x383000 + N × 0x1000
-WR 通道 N：rg_base = BAR0_vaddr + 0x383000 + N × 0x1000 + 0x800
+RD 通道 N：rg_base = BAR0_vaddr + 0x33000 + N × 0x1000
+WR 通道 N：rg_base = BAR0_vaddr + 0x33000 + N × 0x1000 + 0x800
 ```
 
 本示例只使用通道 0：
 
 ```c
-mdev->rd_ch0.rg_base = mdev->bar0 + 0x383000;             // RD ch0
-mdev->wr_ch0.rg_base = mdev->bar0 + 0x383000 + 0x800;     // WR ch0
+mdev->rd_ch0.rg_base = mdev->bar0 + 0x33000;             // RD ch0
+mdev->wr_ch0.rg_base = mdev->bar0 + 0x33000 + 0x800;     // WR ch0
 ```
 
 ### 3.3 通道寄存器布局（相对各通道 rg_base）

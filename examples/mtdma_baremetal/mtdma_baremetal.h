@@ -24,19 +24,19 @@
  * 二、BAR 布局
  *
  * BAR0：控制寄存器区（MMIO，内含 DMA 公共寄存器 + 通道寄存器）
- * BAR2：设备侧 DDR 访问窗口（MMIO，用于写描述符链表到设备内存）
+ * BAR2：设备侧 DDR 访问窗口（MMIO，访问窗口范围 0x00000000–0x7fffffff）
  *
  * DMA 公共寄存器基址（相对 BAR0 起始）：
- *   0x380000  — 公共控制（通道数、突发长度、中断聚合…）
+ *   0x30000   — 公共控制（通道数、突发长度、中断聚合…）
  * DMA 通道寄存器基址（相对 BAR0 起始）：
- *   读通道(RD) ch N：0x383000 + N*0x1000
- *   写通道(WR) ch N：0x383000 + N*0x1000 + 0x800
+ *   读通道(RD) ch N：0x33000 + N*0x1000
+ *   写通道(WR) ch N：0x33000 + N*0x1000 + 0x800
  *
  * "读通道"从硬件角度看是 Host→Device（PCIe Read），
  * "写通道"从硬件角度看是 Device→Host（PCIe Write）。
  * ========================================================= */
-#define MTDMA_COMM_BASE_OFFSET   0x380000UL
-#define MTDMA_CHAN_BASE_OFFSET   0x383000UL
+#define MTDMA_COMM_BASE_OFFSET   0x30000UL
+#define MTDMA_CHAN_BASE_OFFSET   0x33000UL
 #define MTDMA_CH_STRIDE          0x1000UL   /* 每条通道寄存器占 4KB */
 #define MTDMA_WR_CH_OFFSET       0x800UL    /* 写通道相对读通道的偏移 */
 
