@@ -60,23 +60,169 @@ struct dma_bare_ch {
 
 ---
 
-## 三、寄存器布局
+## 三、描述符模式寄存器参考
 
-主要通道寄存器偏移（相对 `rg_vaddr`）：
+所有通道寄存器的偏移均相对于该通道的 `rg_vaddr`（MMIO 基地址，由 `build_dma_info()` 计算得到）。
 
-| 寄存器 | 偏移 | 说明 |
-|--------|------|------|
-| `REG_DMA_CH_ENABLE` | 0x000 | 通道使能 |
-| `REG_DMA_CH_DIRECTION` | 0x004 | 数据/描述符方向控制 |
-| `REG_DMA_CH_MMU_ADDR_TYPE` | 0x010 | MMU 地址类型 |
-| `REG_DMA_CH_FC` | 0x020 | 流控（flow control） |
-| `REG_DMA_CH_INTR_IMSK` | 0x0C4 | 中断屏蔽 |
-| `REG_DMA_CH_INTR_RAW` | 0x0C8 | 中断原始状态（读清） |
-| `REG_DMA_CH_STATUS` | 0x0D0 | 通道忙状态 |
-| `REG_DMA_CH_LBAR_BASIC` | 0x0D4 | 链表基本配置（desc 数量 + chain_en） |
-| `REG_DMA_CH_DESC_OPT` | 0x400 | **第一个描述符直接内嵌在寄存器区** |
+> **设计特点：** 本硬件采用"第一个描述符内嵌于寄存器区"的设计——寄存器区偏移 `0x400` 起的 32 字节就是第 0 号描述符的物理存放位置，而非一个指向外部描述符的地址指针。后续描述符存放在链表内存（设备侧或主机侧），通过每个描述符中的 `LAR` 字段串联。
 
-> 第一个描述符直接写入 `rg_vaddr + 0x400`（即寄存器区内嵌），后续描述符写入链表内存（`ll_vaddr`/`ll_vaddr_system`）。
+---
+
+### 3.1 提交入口（Submit Entry / First Descriptor Address）
+
+本硬件没有独立的 "FETCH_ADDR" 寄存器存放外部描述符地址。取而代之的是：**第 0 号描述符直接写入寄存器区偏移 0x400 起的 8 个 32-bit 寄存器**，硬件固定从此处开始 fetch。
+
+| 寄存器宏 | 偏移 | 等效 `dma_ch_desc` 字段 | 说明 |
+|----------|------|------------------------|------|
+| `REG_DMA_CH_DESC_OPT` | `0x400` | `desc_op` | 描述符控制字（BIT(1)=`CHAIN_EN`：是否继续 fetch 链表；BIT(0)=`INTR_EN`：最后一个描述符置 1 触发中断） |
+| `REG_DMA_CH_ACNT` | `0x404` | `cnt` | 本段传输字节数 − 1（即 `size - 1`） |
+| `REG_DMA_CH_SAR_L` | `0x408` | `sar.lsb` | 源地址低 32 位 |
+| `REG_DMA_CH_SAR_H` | `0x40C` | `sar.msb` | 源地址高 32 位 |
+| `REG_DMA_CH_DAR_L` | `0x410` | `dar.lsb` | 目的地址低 32 位 |
+| `REG_DMA_CH_DAR_H` | `0x414` | `dar.msb` | 目的地址高 32 位 |
+| `REG_DMA_CH_LAR_L` | `0x418` | `lar.lsb` | **第 1 号描述符的物理地址（低 32 位）**；硬件 fetch 完第 0 号描述符后，若 `CHAIN_EN=1`，跳转至此地址继续 fetch |
+| `REG_DMA_CH_LAR_H` | `0x41C` | `lar.msb` | 第 1 号描述符的物理地址（高 32 位） |
+
+**链表配置寄存器（必须在写入第 0 号描述符前设置）：**
+
+| 寄存器宏 | 偏移 | 位域 | 说明 |
+|----------|------|------|------|
+| `REG_DMA_CH_LBAR_BASIC` | `0x0D4` | `[31:16]` = 链表中后续描述符总数（即 `desc_cnt`，0 表示单描述符模式） | 告知硬件链表长度，用于预分配 fetch 资源 |
+| | | `[0]` = `chain_en`（0 = 单描述符，1 = 链式模式） | 0 时硬件只执行第 0 号描述符并停止 |
+
+驱动中的写入顺序（`dma_bare_xfer()`）：
+```c
+// 1. 配置链表参数
+SET_CH_32(bare_ch, REG_DMA_CH_LBAR_BASIC, (desc_cnt << 16) | chain_en);
+
+// 2. 写第 0 号描述符（直接写寄存器区 0x400）
+lli = bare_ch->info.rg_vaddr + REG_DMA_CH_DESC_OPT;  // = rg_vaddr + 0x400
+SET_LL_32(lli, cnt,     size - 1);
+SET_LL_32(lli, sar.lsb, lower_32_bits(sar));
+SET_LL_32(lli, sar.msb, upper_32_bits(sar));
+SET_LL_32(lli, dar.lsb, lower_32_bits(dar));
+SET_LL_32(lli, dar.msb, upper_32_bits(dar));
+// 链式时还需写 lar.lsb / lar.msb → 第 1 号描述符的物理地址
+
+// 3. 后续描述符（i >= 1）写入链表内存（设备侧或主机侧），不再走寄存器
+lli = &(((struct dma_ch_desc *)bare_ch->info.ll_vaddr)[i - 1]);
+// lar 字段 = ll_laddr + i * 32  （指向下一个描述符的本地物理地址）
+```
+
+---
+
+### 3.2 启动 / 门铃（Start / Doorbell）
+
+| 寄存器宏 | 偏移 | 位域 | 说明 |
+|----------|------|------|------|
+| `REG_DMA_CH_ENABLE` | `0x000` | `[0]` = `ENABLE`（写 1 启动，写 0 预清） | **门铃寄存器**：写 1 后 DMA 引擎立即开始 fetch 第 0 号描述符并搬运数据 |
+| | | `[1]` = `NOCROSS`（仅 H2H/D2D 时置 1，禁止跨 PCIe 边界） | 方向控制辅助位 |
+| | | `[2]` = `DUMMY`（D2H/H2H 时置 1，触发 dummy read 保证数据可见性） | |
+| `REG_DMA_CH_DIRECTION` | `0x004` | `[1]` = `NOCROSS`；`[2]` = `DUMMY`；`[0]` = `DESC_MST1`（描述符走 PCIe master 1） | 链式模式下的方向控制（裸机模式写此寄存器；DMA Engine 模式通过 `ch_en` 隐含） |
+
+**标准启动序列（`mtdma_v0_core_start()` / `dma_bare_xfer()`）：**
+```c
+// Step 1: 先写 0 清除旧使能状态（可选，裸机模式在最后统一写）
+SET_CH_32(chan, REG_DMA_CH_ENABLE, ch_en_flags);   // 设置方向标志但不置 ENABLE
+
+// Step 2: 确保前序 PCIe 写已到达硬件（读回确认）
+GET_CH_32(chan, REG_DMA_CH_ENABLE);
+
+// Step 3: 置 ENABLE 位，DMA 引擎开始 fetch 第 0 号描述符
+SET_CH_32(chan, REG_DMA_CH_ENABLE, ch_en_flags | DMA_CH_EN_BIT_ENABLE);  // BIT(0) = 1
+```
+
+> 注意：`REG_DMA_CH_FC`（`0x020`）也需在启动前配置（DMA Engine 模式中：`BIT(0) | (WCH_FC_THLD<<1)`），用于控制写通道 FIFO 水位，防止 PCIe 背压导致 hang。
+
+---
+
+### 3.3 完成判断（Completion Status）
+
+#### 3.3.1 轮询方式（Polling）
+
+| 寄存器宏 | 偏移 | 位域 | 说明 |
+|----------|------|------|------|
+| `REG_DMA_CH_STATUS` | `0x0D0` | `[0]` = `BUSY`（1=传输中，0=空闲/完成） | **忙/空闲状态位**；`dma_v0_core_ch_status()` 读此寄存器判断通道是否完成 |
+
+```c
+// 驱动中的轮询判断（mtdma_v0_core_ch_status）
+tmp = GET_CH_32(chan, REG_DMA_CH_STATUS);
+if (tmp & DMA_CH_STATUS_BUSY)   // BIT(0)
+    return DMA_IN_PROGRESS;     // 仍在传输
+else
+    return DMA_COMPLETE;        // 已完成
+```
+
+#### 3.3.2 中断方式（Interrupt，推荐）
+
+| 寄存器宏 | 偏移 | 位域 | 说明 |
+|----------|------|------|------|
+| `REG_DMA_CH_INTR_IMSK` | `0x0C4` | 写 `0x0` = 使能所有中断；写 `0x1F` = 屏蔽所有 | **中断屏蔽**：启动前写 0 开中断，清零 ISR 返回后可再次屏蔽 |
+| `REG_DMA_CH_INTR_RAW` | `0x0C8` | `[0]` = `DONE`（写 1 清除） | **传输完成中断**：最后一个描述符（`INTR_EN=1`）执行完后置 1，触发 MSI/MSI-X |
+| `REG_DMA_CH_INTR_STATUS` | `0x0CC` | 同 `INTR_RAW` 但经过 mask 过滤 | 可选：读 INTR_STATUS 代替 INTR_RAW（已屏蔽的中断不显示） |
+
+**ISR 中的完成判断（`dma_bare_isr()`）：**
+```c
+val = GET_CH_32(bare_ch, REG_DMA_CH_INTR_RAW);
+
+if (val & DMA_CH_INTR_BIT_DONE)          // BIT(0)：全部描述符执行完毕
+    bare_ch->int_error = 0;              // 正常完成
+
+SET_CH_32(bare_ch, REG_DMA_CH_INTR_RAW, val);  // 写 1 清中断（W1C）
+GET_CH_32(bare_ch, REG_DMA_CH_INTR_RAW);       // 读回，确保 PCIe write 已达硬件
+
+complete(&bare_ch->int_done);                  // 唤醒等待者
+```
+
+---
+
+### 3.4 错误寄存器（Error Register）
+
+#### 通道级错误：`REG_DMA_CH_INTR_RAW`（`0x0C8`）
+
+错误位与完成位共用同一寄存器（W1C，写 1 清除）：
+
+| 位 | 宏定义 | 错误类型 | 典型原因 |
+|----|--------|----------|----------|
+| `[0]` | `DMA_CH_INTR_BIT_DONE` | 完成（非错误） | 正常完成 |
+| `[1]` | `DMA_CH_INTR_BIT_ERR_DATA` | **数据错误** | PCIe completion abort / AXI slave error（数据传输阶段） |
+| `[2]` | `DMA_CH_INTR_BIT_ERR_DESC_READ` | **描述符 fetch 错误** | LAR 指向的地址不可达、PCIe 链路异常、权限错误（描述符读取阶段）|
+| `[3]` | `DMA_CH_INTR_BIT_ERR_CFG` | **配置错误** | `LBAR_BASIC`、地址对齐、描述符字段非法等配置不合法 |
+| `[4]` | `DMA_CH_INTR_BIT_ERR_DUMMY_READ` | **Dummy read 错误** | D2H/H2H 模式下用于数据可见性的虚读操作失败 |
+
+**ISR 中的错误解析：**
+```c
+val = GET_CH_32(bare_ch, REG_DMA_CH_INTR_RAW);
+
+if (val & DMA_CH_INTR_BIT_ERR_DATA)
+    printk("DMA DATA error: PCIe/AXI error during data transfer (val=0x%x)\n", val);
+if (val & DMA_CH_INTR_BIT_ERR_DESC_READ)
+    printk("DMA DESC_READ error: failed to fetch descriptor via LAR (val=0x%x)\n", val);
+if (val & DMA_CH_INTR_BIT_ERR_CFG)
+    printk("DMA CFG error: illegal descriptor config or alignment (val=0x%x)\n", val);
+if (val & DMA_CH_INTR_BIT_ERR_DUMMY_READ)
+    printk("DMA DUMMY_READ error: dummy read failed (val=0x%x)\n", val);
+```
+
+#### 全局/公共错误：`REG_DMA_COMM_COMM_ALARM_RAW`（公共基址 `+0xC04`）
+
+| 寄存器宏 | 偏移（相对公共基址）| 说明 |
+|----------|-------------------|------|
+| `REG_DMA_COMM_COMM_ALARM_IMSK` | `0xC00` | 全局告警中断屏蔽（写 0 使能） |
+| `REG_DMA_COMM_COMM_ALARM_RAW` | `0xC04` | 全局告警原始状态（跨通道 AXI/PCIe 级错误） |
+| `REG_DMA_COMM_COMM_ALARM_STATUS` | `0xC08` | 全局告警屏蔽后状态 |
+| `REG_DMA_COMM_WORK_STS` | `0xD00` | 全局忙状态（初始化时检测，非零表示 DMA 未完全空闲） |
+
+---
+
+### 3.5 辅助寄存器（Auxiliary）
+
+| 寄存器宏 | 偏移 | 说明 |
+|----------|------|------|
+| `REG_DMA_CH_DIRECTION` | `0x004` | 裸机模式下的方向寄存器（`NOCROSS`/`DUMMY`/`DESC_MST1`），DMA Engine 模式合并进 `REG_DMA_CH_ENABLE` |
+| `REG_DMA_CH_MMU_ADDR_TYPE` | `0x010` | 仅 `MTDMA_MMU=1` 时有效：地址类型（H2D=`0x100`，D2H=`0x1`，D2D=`0x101`，H2H=`0x0`） |
+| `REG_DMA_CH_FC` | `0x020` | 写通道 FIFO 流控：`BIT(0)=FC_EN`，`[x:1]=THLD`（阈值，默认 `0x10` = 16K） |
+| `REG_DUMMY_CH_ADDR_L/H` | `0x008/0x00C` | **只读**；D2H/H2H 模式下硬件自动填充的 dummy read 目标地址（调试用） |
 
 ---
 
