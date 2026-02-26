@@ -24,32 +24,39 @@
  * 二、BAR 布局
  *
  * BAR0：控制寄存器区（MMIO，内含 DMA 公共寄存器 + 通道寄存器）
- * BAR2：设备侧 DDR 访问窗口（MMIO，用于写描述符链表到设备内存）
- *       访问窗口范围：0x00000000 — 0x7fffffff（共 2 GB）
- *       数据区：0x00000000 — 0x6fffffff
- *       描述符链表区：0x70000000 — 0x7fffffff
+ * BAR2：设备侧 DDR 访问窗口（MMIO，供 Host CPU 通过 MMIO 读写设备 DDR）
+ *       注意：BAR2 仅供 Host 侧 CPU 访问设备 DDR 使用；
+ *             DMA 引擎写设备 DDR 时使用设备本地地址，无需加 BAR2 物理基址。
  *
  * DMA 公共寄存器基址（相对 BAR0 起始）：
- *   0x30000  — 公共控制（通道数、突发长度、中断聚合…）
+ *   0x380000  — 公共控制（通道数、突发长度、中断聚合…）
  * DMA 通道寄存器基址（相对 BAR0 起始）：
- *   读通道(RD) ch N：0x33000 + N*0x1000
- *   写通道(WR) ch N：0x33000 + N*0x1000 + 0x800
+ *   读通道(RD) ch N：0x383000 + N*0x1000
+ *   写通道(WR) ch N：0x383000 + N*0x1000 + 0x800
  *
  * "读通道"从硬件角度看是 Host→Device（PCIe Read），
  * "写通道"从硬件角度看是 Device→Host（PCIe Write）。
  * ========================================================= */
-#define MTDMA_COMM_BASE_OFFSET   0x30000UL
-#define MTDMA_CHAN_BASE_OFFSET   0x33000UL
+#define MTDMA_COMM_BASE_OFFSET   0x380000UL
+#define MTDMA_CHAN_BASE_OFFSET   0x383000UL
 
-/* BAR2 窗口布局 */
-#define MTDMA_BAR2_WIN_SIZE      0x80000000UL  /* BAR2 总大小：2 GB（0x00000000-0x7fffffff）*/
+/*
+ * BAR2 设备 DDR 访问窗口（Host CPU 侧访问）：
+ * 通过 inbound iATU 映射，BAR2 起始对应设备 DDR 偏移 0x0。
+ * 实际映射范围取决于硬件配置，至少覆盖数据区（数据区 + 描述符链表区）。
+ *
+ * 注意：H2D DMA 的 DAR（目的地址）应填写设备 DDR 的本地偏移地址，
+ *       例如 0x100000，而不是 BAR2 的 PCIe 物理基址加上偏移。
+ *       BAR2 物理基址（pci_resource_start(pdev, 2)）仅供 Host CPU 用 MMIO
+ *       访问设备 DDR 时使用，DMA 引擎直接使用设备内部 AXI 地址。
+ */
 #define MTDMA_DATA_END           0x6fffffffUL  /* 数据区上界（0x00000000-0x6fffffff）*/
 #define MTDMA_DESC_LIST_BASE     0x70000000UL  /* 描述符链表区起始（0x70000000-0x7fffffff）*/
 #define MTDMA_CH_STRIDE          0x1000UL   /* 每条通道寄存器占 4KB */
 #define MTDMA_WR_CH_OFFSET       0x800UL    /* 写通道相对读通道的偏移 */
 
 /* =========================================================
- * 三、公共寄存器偏移（相对 mtdma_comm_base = BAR0 + 0x30000）
+ * 三、公共寄存器偏移（相对 mtdma_comm_base = BAR0 + 0x380000）
  * ========================================================= */
 #define REG_COMM_BASIC_PARAM     0x000  /* RO：硬件版本 */
 #define REG_COMM_CH_NUM          0x400  /* RW：总通道数-1，写入(PCIE_DMA_CH_NUM-1) */
