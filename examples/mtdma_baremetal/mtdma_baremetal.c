@@ -6,6 +6,8 @@
  *       通过裸机模式（直接操作寄存器，不依赖 Linux DMA engine 框架）
  *       完成一次 Host→Device（H2D）和一次 Device→Host（D2H）数据搬运。
  *
+ * 完成检测方式：寄存器轮询（轮询 REG_CH_INTR_RAW），不使用 MSI 中断。
+ *
  * 不复用原始驱动的任何 .c/.h 文件，所有定义均在 mtdma_baremetal.h 中自包含。
  *
  * 编译：见同目录 Makefile
@@ -15,14 +17,14 @@
 
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/ktime.h>
 #include "mtdma_baremetal.h"
 
 MODULE_AUTHOR("MT EMU Example");
-MODULE_DESCRIPTION("Minimal bare-metal MTDMA PCIe DMA example");
+MODULE_DESCRIPTION("Minimal bare-metal MTDMA PCIe DMA example (polling mode)");
 MODULE_LICENSE("GPL v2");
 
 /* 测试传输大小：64 KB */
@@ -61,17 +63,15 @@ static void mtdma_comm_init(struct mtdma_dev *mdev)
 	writel(MTDMA_BLEN_VAL, c + REG_COMM_MST0_BLEN);
 	writel(MTDMA_BLEN_VAL, c + REG_COMM_MST1_BLEN);
 
-	/* 使能全局告警中断（写 0 = 不屏蔽）*/
-	writel(0, c + REG_COMM_ALARM_IMSK);
+	/* 屏蔽全局告警中断（轮询模式下不需要中断上报）*/
+	writel(0xffffffff, c + REG_COMM_ALARM_IMSK);
 
 	/*
-	 * 使能通道 0 的完成聚合中断：
-	 * REG_COMM_RD_IMSK_C32 的 BIT(0) 对应 RD 通道 0。
-	 * REG_COMM_WR_IMSK_C32 的 BIT(0) 对应 WR 通道 0。
-	 * 写 1 表示"此通道的完成中断可以上报到顶层聚合寄存器"。
+	 * 轮询模式：屏蔽通道完成聚合中断，通道完成状态由软件轮询
+	 * REG_CH_INTR_RAW 获取，无需通过顶层聚合寄存器触发 MSI。
 	 */
-	writel(BIT(0), c + REG_COMM_RD_IMSK_C32);
-	writel(BIT(0), c + REG_COMM_WR_IMSK_C32);
+	writel(0, c + REG_COMM_RD_IMSK_C32);
+	writel(0, c + REG_COMM_WR_IMSK_C32);
 
 	/* 检查初始化后 DMA 是否处于空闲状态 */
 	if (readl(c + REG_COMM_WORK_STS))
@@ -186,100 +186,58 @@ static void mtdma_submit_single(struct mtdma_chan *ch,
 }
 
 /* =========================================================
- * § 4. 通道中断服务（由顶层 PCIe ISR 调用）
+ * § 4. 寄存器轮询等待 DMA 完成
  *
- * 硬件行为：
- *   当最后一个描述符（INTR_EN=1）执行完毕，或发生错误时，
- *   向 PCIe 主机发送 MSI/MSI-X 中断。
+ * 替代中断方式：周期性读取 REG_CH_INTR_RAW 直到 CH_INTR_DONE
+ * 或错误位被硬件置位，或超时（5 秒）。
  *
- * 软件操作：
- *   1. 读 INTR_RAW 获取中断原因。
- *   2. 写 1 清除已读取的位（W1C）。
- *   3. 读回一次（确保 PCIe 写已到达硬件，避免虚假重入）。
- *   4. 解析完成 / 错误，唤醒等待者。
+ * 注意：DESC_INTR_EN 仍设置在描述符中，以确保硬件在完成时置位
+ *       CH_INTR_RAW[0]（done 位），同时 REG_CH_INTR_IMSK 保持 0
+ *       （不屏蔽通道内部中断状态），只是不向上传递 MSI。
  * ========================================================= */
-static void mtdma_chan_isr(struct mtdma_chan *ch)
+#define MTDMA_POLL_INTERVAL_US   500            /* 每次轮询间隔 500 µs */
+#define MTDMA_POLL_TIMEOUT_MS    5000U          /* 超时 5 秒 */
+
+static int mtdma_poll_done(struct mtdma_chan *ch)
 {
+	ktime_t deadline = ktime_add_ms(ktime_get(), MTDMA_POLL_TIMEOUT_MS);
 	u32 val;
 
-	/* 读取中断原始状态（包含完成位和错误位）*/
-	val = ch_readl(ch, REG_CH_INTR_RAW);
+	do {
+		val = ch_readl(ch, REG_CH_INTR_RAW);
 
-	if (val & CH_INTR_DONE) {
-		ch->last_error = 0;
-	} else if (val & CH_INTR_ERR_MASK) {
-		ch->last_error = (int)(val & CH_INTR_ERR_MASK);
-		if (val & CH_INTR_ERR_DATA)
-			pr_err("MTDMA: DATA error (PCIe/AXI) val=0x%x\n", val);
-		if (val & CH_INTR_ERR_DESC_READ)
-			pr_err("MTDMA: DESC_READ error (bad LAR addr) val=0x%x\n", val);
-		if (val & CH_INTR_ERR_CFG)
-			pr_err("MTDMA: CFG error (bad config) val=0x%x\n", val);
-		if (val & CH_INTR_ERR_DUMMY_READ)
-			pr_err("MTDMA: DUMMY_READ error val=0x%x\n", val);
-	} else {
-		pr_warn("MTDMA: unexpected interrupt val=0x%x\n", val);
-	}
+		if (val & CH_INTR_DONE) {
+			ch->last_error = 0;
+			/* W1C：清除中断状态标志 */
+			ch_writel(ch, REG_CH_INTR_RAW, val);
+			(void)ch_readl(ch, REG_CH_INTR_RAW); /* read-back flush */
+			return 0;
+		}
 
-	/* W1C：将读到的位写回以清除中断标志 */
-	ch_writel(ch, REG_CH_INTR_RAW, val);
+		if (val & CH_INTR_ERR_MASK) {
+			ch->last_error = (int)(val & CH_INTR_ERR_MASK);
+			if (val & CH_INTR_ERR_DATA)
+				pr_err("MTDMA: DATA error (PCIe/AXI) val=0x%x\n", val);
+			if (val & CH_INTR_ERR_DESC_READ)
+				pr_err("MTDMA: DESC_READ error (bad LAR addr) val=0x%x\n", val);
+			if (val & CH_INTR_ERR_CFG)
+				pr_err("MTDMA: CFG error (bad config) val=0x%x\n", val);
+			if (val & CH_INTR_ERR_DUMMY_READ)
+				pr_err("MTDMA: DUMMY_READ error val=0x%x\n", val);
+			/* W1C：清除中断状态标志 */
+			ch_writel(ch, REG_CH_INTR_RAW, val);
+			(void)ch_readl(ch, REG_CH_INTR_RAW); /* read-back flush */
+			return -EIO;
+		}
 
-	/*
-	 * 读回确认：PCIe posted write 有可能还在 RC 内部 buffer 里，
-	 * 这次读强制 RC 等待写完成，防止硬件在 ISR 返回前重新触发同一中断。
-	 */
-	(void)ch_readl(ch, REG_CH_INTR_RAW);
+		usleep_range(MTDMA_POLL_INTERVAL_US, MTDMA_POLL_INTERVAL_US + 100);
+	} while (ktime_before(ktime_get(), deadline));
 
-	/* 唤醒在 wait_for_completion_timeout() 中等待的任务 */
-	complete(&ch->xfer_done);
+	return -ETIMEDOUT;
 }
 
 /* =========================================================
- * § 5. PCIe MSI 中断顶层处理函数
- *
- * 硬件中断路由：
- *   所有通道的完成中断汇聚到公共寄存器的 MRG_STS：
- *     BIT(0)  = RD 方向有通道完成
- *     BIT(16) = WR 方向有通道完成
- *   进一步通过 RD_STS_C32/C64、WR_STS_C32/C64 定位具体通道。
- *
- * 此示例只处理通道 0（BIT(0) = 通道 0）。
- * ========================================================= */
-static irqreturn_t mtdma_irq_handler(int irq, void *data)
-{
-	struct mtdma_dev *mdev = data;
-	void __iomem *c = mdev->comm_base;
-	u32 mrg_sts;
-	u32 rd_sts, wr_sts;
-
-	mrg_sts = readl(c + REG_COMM_MRG_STS);
-
-	/* 处理 RD 通道完成（Host→Device 方向）*/
-	if (mrg_sts & BIT(0)) {
-		rd_sts = readl(c + REG_COMM_RD_STS_C32);
-		if (rd_sts & BIT(0)) {                          /* 通道 0 */
-			pr_info("MTDMA: RD channel 0 done\n");
-			mtdma_chan_isr(&mdev->rd_ch0);
-		}
-		/* W1C：清除已处理通道的状态位 */
-		writel(rd_sts, c + REG_COMM_RD_STS_C32);
-	}
-
-	/* 处理 WR 通道完成（Device→Host 方向）*/
-	if (mrg_sts & BIT(16)) {
-		wr_sts = readl(c + REG_COMM_WR_STS_C32);
-		if (wr_sts & BIT(0)) {                          /* 通道 0 */
-			pr_info("MTDMA: WR channel 0 done\n");
-			mtdma_chan_isr(&mdev->wr_ch0);
-		}
-		writel(wr_sts, c + REG_COMM_WR_STS_C32);
-	}
-
-	return IRQ_HANDLED;
-}
-
-/* =========================================================
- * § 6. 完整的 H2D + D2H 功能测试
+ * § 5. 完整的 H2D + D2H 功能测试
  *
  * 流程：
  *   1. 分配主机侧 DMA 相干内存（host_buf）
@@ -287,13 +245,13 @@ static irqreturn_t mtdma_irq_handler(int irq, void *data)
  *   3. D2H：用 WR 通道把 设备 DDR 0x100000 → host_buf2
  *   4. 验证数据正确性
  *   5. 释放内存
+ *
+ * 完成检测：寄存器轮询（mtdma_poll_done），不使用 MSI 中断。
  * ========================================================= */
 static int mtdma_run_selftest(struct mtdma_dev *mdev)
 {
 	dma_addr_t h2d_bus_addr, d2h_bus_addr;
 	void      *h2d_buf, *d2h_buf;
-	u32        timeout_jiffies = msecs_to_jiffies(5000); /* 5 s */
-	long       left;
 	int        i, ret = 0;
 
 	/* 分配主机侧相干 DMA 内存（不经 IOMMU，物理地址直接可用）*/
@@ -322,30 +280,26 @@ static int mtdma_run_selftest(struct mtdma_dev *mdev)
 		 "MTDMA selftest: H2D  host_bus=0x%llx → dev=0x%llx  size=%u\n",
 		 (u64)h2d_bus_addr, DEVICE_TEST_ADDR, XFER_SIZE);
 
-	reinit_completion(&mdev->rd_ch0.xfer_done);
-
 	mutex_lock(&mdev->rd_ch0.lock);
 	/*
 	 * H2D：SAR = 主机物理地址，DAR = 设备 DDR 地址。
 	 * 方向标志 = 0（H2D 不需要 NOCROSS / DUMMY）。
-	 * 注意：MMU 关闭（MTDMA_MMU=0），地址直接透传给硬件。
 	 */
 	mtdma_submit_single(&mdev->rd_ch0,
 			    (u64)h2d_bus_addr, DEVICE_TEST_ADDR,
 			    XFER_SIZE, 0);
+
+	/* 轮询等待 H2D 完成 */
+	ret = mtdma_poll_done(&mdev->rd_ch0);
 	mutex_unlock(&mdev->rd_ch0.lock);
 
-	left = wait_for_completion_timeout(&mdev->rd_ch0.xfer_done,
-					   timeout_jiffies);
-	if (!left) {
+	if (ret == -ETIMEDOUT) {
 		dev_err(&mdev->pdev->dev, "MTDMA H2D timeout!\n");
-		ret = -ETIMEDOUT;
 		goto free_d2h;
 	}
-	if (mdev->rd_ch0.last_error) {
+	if (ret) {
 		dev_err(&mdev->pdev->dev, "MTDMA H2D error=0x%x\n",
 			mdev->rd_ch0.last_error);
-		ret = -EIO;
 		goto free_d2h;
 	}
 	dev_info(&mdev->pdev->dev, "MTDMA H2D done OK\n");
@@ -355,8 +309,6 @@ static int mtdma_run_selftest(struct mtdma_dev *mdev)
 		 "MTDMA selftest: D2H  dev=0x%llx → host_bus=0x%llx  size=%u\n",
 		 DEVICE_TEST_ADDR, (u64)d2h_bus_addr, XFER_SIZE);
 
-	reinit_completion(&mdev->wr_ch0.xfer_done);
-
 	mutex_lock(&mdev->wr_ch0.lock);
 	/*
 	 * D2H：SAR = 设备 DDR 地址，DAR = 主机物理地址。
@@ -365,19 +317,18 @@ static int mtdma_run_selftest(struct mtdma_dev *mdev)
 	mtdma_submit_single(&mdev->wr_ch0,
 			    DEVICE_TEST_ADDR, (u64)d2h_bus_addr,
 			    XFER_SIZE, CH_EN_DUMMY);
+
+	/* 轮询等待 D2H 完成 */
+	ret = mtdma_poll_done(&mdev->wr_ch0);
 	mutex_unlock(&mdev->wr_ch0.lock);
 
-	left = wait_for_completion_timeout(&mdev->wr_ch0.xfer_done,
-					   timeout_jiffies);
-	if (!left) {
+	if (ret == -ETIMEDOUT) {
 		dev_err(&mdev->pdev->dev, "MTDMA D2H timeout!\n");
-		ret = -ETIMEDOUT;
 		goto free_d2h;
 	}
-	if (mdev->wr_ch0.last_error) {
+	if (ret) {
 		dev_err(&mdev->pdev->dev, "MTDMA D2H error=0x%x\n",
 			mdev->wr_ch0.last_error);
-		ret = -EIO;
 		goto free_d2h;
 	}
 	dev_info(&mdev->pdev->dev, "MTDMA D2H done OK\n");
@@ -400,7 +351,7 @@ free_h2d:
 }
 
 /* =========================================================
- * § 7. PCI probe / remove
+ * § 6. PCI probe / remove
  * ========================================================= */
 static int mtdma_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
@@ -448,22 +399,6 @@ static int mtdma_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* 使能 PCI Bus Master（必须，否则 DMA 无法发起 PCIe 读写）*/
 	pci_set_master(pdev);
 
-	/* 分配 MSI 中断：申请 1 个向量 */
-	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "pci_alloc_irq_vectors failed: %d\n", ret);
-		return ret;
-	}
-
-	/* 注册中断处理函数 */
-	ret = request_irq(pci_irq_vector(pdev, 0), mtdma_irq_handler,
-			  0, "mtdma_baremetal", mdev);
-	if (ret) {
-		dev_err(&pdev->dev, "request_irq failed: %d\n", ret);
-		pci_free_irq_vectors(pdev);
-		return ret;
-	}
-
 	/* 初始化硬件公共寄存器 */
 	mtdma_comm_init(mdev);
 
@@ -480,16 +415,11 @@ static int mtdma_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 static void mtdma_remove(struct pci_dev *pdev)
 {
-	struct mtdma_dev *mdev = pci_get_drvdata(pdev);
-
-	free_irq(pci_irq_vector(pdev, 0), mdev);
-	pci_free_irq_vectors(pdev);
-
 	dev_info(&pdev->dev, "MTDMA removed\n");
 }
 
 /* =========================================================
- * § 8. 模块入口
+ * § 7. 模块入口
  * ========================================================= */
 static const struct pci_device_id mtdma_pci_tbl[] = {
 	{ PCI_DEVICE(MTDMA_PCI_VENDOR_ID, MTDMA_PCI_DEVICE_ID_GPU)  },

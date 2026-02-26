@@ -1,0 +1,1 @@
+g++ -std=c++11 -DSPDLOG_COMPILED_LIB -O2 -Wall -O3 -DNDEBUG -rdynamic -Wl,--dependency-file=CMakeFiles/test.dir/link.d CMakeFiles/test.dir/src/base.cc.o CMakeFiles/test.dir/src/intr.cc.o CMakeFiles/test.dir/src/main.cc.o CMakeFiles/test.dir/src/mthdma.cc.o CMakeFiles/test.dir/src/stress.cc.o CMakeFiles/test.dir/src/test_thr.cc.o -o test  libmlib.a

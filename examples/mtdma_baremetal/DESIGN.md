@@ -173,27 +173,43 @@ PCIe 写是 posted（单向，不等待确认），主机可能连续写多个�
 
 ---
 
-## 六、中断处理流程（`mtdma_irq_handler()` → `mtdma_chan_isr()`）
+## 六、完成检测方式：寄存器轮询（`mtdma_poll_done()`）
+
+当前版本使用**寄存器轮询**替代 MSI 中断，用于在中断功能不可用时验证
+DMA 传输是否正确工作。
 
 ```
-MSI 中断触发
+提交传输（mtdma_submit_single）
      │
      ▼
-mtdma_irq_handler()
-  ├─ 读 REG_COMM_MRG_STS
-  │    BIT(0)=1 → RD 通道有完成
-  │    BIT(16)=1 → WR 通道有完成
-  │
-  ├─ 读 REG_COMM_RD_STS_C32（or WR_STS）
-  │    BIT(N)=1 → 通道 N 完成
-  │
-  └─ 调用 mtdma_chan_isr(ch)
-         ├─ val = 读 REG_CH_INTR_RAW      ← 获取原因
-         ├─ 解析 val & DONE / ERR_*
-         ├─ 写 REG_CH_INTR_RAW = val      ← W1C：清中断
-         ├─ 读 REG_CH_INTR_RAW            ← read-back 保证清除完成
-         └─ complete(&ch->xfer_done)      ← 唤醒 wait_for_completion_timeout()
+mtdma_poll_done(ch)                         REG_CH_INTR_RAW
+  ┌─ 循环轮询，每 500 µs 读一次 ─────────────►│
+  │                                           │  0: 传输未完成，继续等待
+  │  val = REG_CH_INTR_RAW                   │  BIT(0)=CH_INTR_DONE：传输完成
+  │  BIT(0) = CH_INTR_DONE?  ── 是 ──►  W1C 清除，return 0
+  │  val & CH_INTR_ERR_MASK? ── 是 ──►  W1C 清除，return -EIO
+  │  超时（5 秒）             ── 是 ──►  return -ETIMEDOUT
+  └─ 否：usleep_range(500us, 1ms)，继续
 ```
+
+**为什么仍保留 `DESC_INTR_EN` 和 `REG_CH_INTR_IMSK=0`？**
+
+- `DESC_INTR_EN`（描述符控制字 BIT(0)）：通知硬件在此描述符执行完毕后
+  将 `REG_CH_INTR_RAW[0]`（CH_INTR_DONE）**置位**。没有此标志，done 位
+  可能不会被置位，轮询将无法检测到完成。
+- `REG_CH_INTR_IMSK=0`：不屏蔽通道内部中断状态，确保 INTR_RAW 中的状态
+  位可以被软件读取。
+- `REG_COMM_RD/WR_IMSK_C32=0`：在聚合层屏蔽通道 0 的完成通知，防止
+  发出 MSI（即使 MSI 向量已申请，也不会触发）。
+
+**恢复中断模式的方法**（未来中断修复后）：
+
+1. 将 `REG_COMM_RD/WR_IMSK_C32` 写为 `BIT(0)`（使能通道 0 聚合中断）。
+2. 在 `probe` 中调用 `pci_alloc_irq_vectors` + `request_irq` 注册 ISR。
+3. 在 ISR 中读 `REG_COMM_MRG_STS` → `RD/WR_STS_C32`，调用
+   `complete(&ch->xfer_done)` 唤醒等待任务。
+4. 将 `mtdma_run_selftest` 中的 `mtdma_poll_done()` 替换回
+   `wait_for_completion_timeout()`。
 
 ---
 
@@ -273,10 +289,8 @@ sudo dmesg | grep -E "MTDMA|mtdma"
 #   BAR0=... BAR2=...
 #   MTDMA hardware version: 0x...
 #   MTDMA selftest: H2D  host_bus=0x... → dev=0x100000  size=65536
-#   MTDMA: RD channel 0 done
 #   MTDMA H2D done OK
 #   MTDMA selftest: D2H  dev=0x100000 → host_bus=0x...  size=65536
-#   MTDMA: WR channel 0 done
 #   MTDMA D2H done OK
 #   MTDMA selftest PASSED: H2D/D2H data match
 
