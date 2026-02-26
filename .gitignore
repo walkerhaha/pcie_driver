@@ -1,0 +1,12 @@
+# CodeQL analysis artifacts
+_codeql_detected_source_root
+test/_codeql_build_dir/
+
+# Kernel module build artifacts
+*.ko
+*.o
+*.mod
+*.mod.c
+*.order
+*.symvers
+.*.cmd
