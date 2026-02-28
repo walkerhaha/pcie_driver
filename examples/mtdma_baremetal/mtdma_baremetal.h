@@ -25,9 +25,9 @@
  *
  * BAR0：控制寄存器区（MMIO，内含 DMA 公共寄存器 + 通道寄存器）
  * BAR2：设备侧 DDR 访问窗口（MMIO，用于写描述符链表到设备内存）
- *       访问窗口范围：0x00000000 — 0x7fffffff（共 2 GB）
- *       数据区：0x00000000 — 0x6fffffff
- *       描述符链表区：0x70000000 — 0x7fffffff
+ *       访问窗口范围：0x010000000000 — 0x01007fffffff（共 2 GB）
+ *       数据区：0x010000000000 — 0x01006fffffff
+ *       描述符链表区：0x010070000000 — 0x01007fffffff
  *
  * DMA 公共寄存器基址（相对 BAR0 起始）：
  *   0x30000  — 公共控制（通道数、突发长度、中断聚合…）
@@ -42,9 +42,9 @@
 #define MTDMA_CHAN_BASE_OFFSET   0x33000UL
 
 /* BAR2 窗口布局 */
-#define MTDMA_BAR2_WIN_SIZE      0x80000000UL  /* BAR2 总大小：2 GB（0x00000000-0x7fffffff）*/
-#define MTDMA_DATA_END           0x6fffffffUL  /* 数据区上界（0x00000000-0x6fffffff）*/
-#define MTDMA_DESC_LIST_BASE     0x70000000UL  /* 描述符链表区起始（0x70000000-0x7fffffff）*/
+#define MTDMA_BAR2_WIN_SIZE      0x80000000UL  /* BAR2 总大小：2 GB（窗口偏移 0x00000000-0x7fffffff）*/
+#define MTDMA_DATA_END           0x6fffffffUL  /* 数据区 BAR2 偏移上界（设备 DDR 0x010000000000-0x01006fffffff）*/
+#define MTDMA_DESC_LIST_BASE     0x70000000UL  /* 描述符链表区 BAR2 偏移起始（设备 DDR 0x010070000000-0x01007fffffff）*/
 #define MTDMA_CH_STRIDE          0x1000UL   /* 每条通道寄存器占 4KB */
 #define MTDMA_WR_CH_OFFSET       0x800UL    /* 写通道相对读通道的偏移 */
 
@@ -146,8 +146,8 @@ struct mtdma_desc {
 /* =========================================================
  * 六、AXI 突发长度默认值（写入 REG_COMM_MST0/1_BLEN）
  * ========================================================= */
-#define MTDMA_MST_ARLEN   4   /* AXI Read  Outstanding burst length */
-#define MTDMA_MST_AWLEN   4   /* AXI Write Outstanding burst length */
+#define MTDMA_MST_ARLEN   2   /* AXI Read  Outstanding burst length（最大 512B）*/
+#define MTDMA_MST_AWLEN   2   /* AXI Write Outstanding burst length（最大 512B）*/
 #define MTDMA_BLEN_VAL    ((MTDMA_MST_ARLEN << 4) | MTDMA_MST_AWLEN)
 
 /* =========================================================

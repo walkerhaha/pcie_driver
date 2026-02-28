@@ -31,8 +31,8 @@ MODULE_LICENSE("GPL v2");
 #define XFER_SIZE  (64 * 1024)
 
 /* 设备本地（DDR）目标地址：放在设备 DDR 偏移 0x100000 处，
- * 位于数据区（0x00000000-0x6fffffff），远离链表区（0x70000000-0x7fffffff）*/
-#define DEVICE_TEST_ADDR  0x100000ULL
+ * 位于数据区（0x010000000000-0x01006fffffff），远离链表区（0x010070000000-0x01007fffffff）*/
+#define DEVICE_TEST_ADDR  0x010000100000ULL
 
 /* =========================================================
  * § 1. 公共寄存器初始化
