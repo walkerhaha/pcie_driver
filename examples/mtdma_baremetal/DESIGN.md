@@ -27,10 +27,10 @@ Device→Host（D2H）数据搬运。
  │  DMA 缓冲区     │                │    0x30000  DMA 公共寄存器区           │
  │  (物理内存)     │                │    0x33000  DMA 通道寄存器区           │
  └────────────────┘                │  BAR2  设备 DDR 访问窗口（MMIO 透传）  │
-                                   │    0x00000000-0x6fffffff  数据区       │
-                                   │    0x70000000-0x7fffffff  描述符链表区  │
+                                   │    0x010000000000-0x01006fffffff  数据区       │
+                                   │    0x010070000000-0x01007fffffff  描述符链表区  │
                                    │  设备 DDR（硬件内存）                  │
-                                   │    0x100000  本示例测试数据区          │
+                                   │    0x010000100000  本示例测试数据区    │
                                    └──────────────────────────────────────┘
 ```
 
@@ -253,13 +253,13 @@ PCIe 读请求，该读请求完成表示所有写操作已被主机确认，数
  │
  │ ① H2D：RD 通道 0
  │    SAR = h2d_bus_addr（主机物理地址）
- │    DAR = 0x100000（设备 DDR 偏移）
+ │    DAR = 0x010000100000（设备 DDR 地址）
  │    dir_flags = 0
  │    ──────────────────────────────────────────►
- │                                               设备 DDR 0x100000
+ │                                               设备 DDR 0x010000100000
  │                                               │
  │ ② D2H：WR 通道 0                             │
- │    SAR = 0x100000（设备 DDR 偏移）            │
+ │    SAR = 0x010000100000（设备 DDR 地址）            │
  │    DAR = d2h_bus_addr（主机物理地址）         │
  │    dir_flags = CH_EN_DUMMY                   │
  │    ◄──────────────────────────────────────────
@@ -288,9 +288,9 @@ sudo dmesg | grep -E "MTDMA|mtdma"
 #   MTDMA probe: 1ed5:0200
 #   BAR0=... BAR2=...
 #   MTDMA hardware version: 0x...
-#   MTDMA selftest: H2D  host_bus=0x... → dev=0x100000  size=65536
+#   MTDMA selftest: H2D  host_bus=0x... → dev=0x010000100000  size=65536
 #   MTDMA H2D done OK
-#   MTDMA selftest: D2H  dev=0x100000 → host_bus=0x...  size=65536
+#   MTDMA selftest: D2H  dev=0x010000100000 → host_bus=0x...  size=65536
 #   MTDMA D2H done OK
 #   MTDMA selftest PASSED: H2D/D2H data match
 
