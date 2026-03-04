@@ -2,9 +2,13 @@
 /*
  * mtdma_baremetal.c — 独立裸机 DMA 示例内核模块
  *
- * 功能：以最简方式演示如何使用 MT EMU PCIe 设备的 MTDMA 控制器
- *       通过裸机模式（直接操作寄存器，不依赖 Linux DMA engine 框架）
- *       完成一次 Host→Device（H2D）和一次 Device→Host（D2H）数据搬运。
+ * 功能：以裸机模式（直接操作寄存器）演示 MTDMA 控制器的六种传输模式：
+ *   1. single task in single chain   — 单描述符，单通道（ch0）
+ *   2. chain mode in single chain    — 链式描述符，单通道
+ *   3. chain block mode in single chain — 多块链式，单通道
+ *   4. single task in multi chain    — 单描述符，双通道并行
+ *   5. chain mode in multi chain     — 链式描述符，双通道并行
+ *   6. chain block mode in multi chain — 多块链式，双通道并行
  *
  * 完成检测方式：寄存器轮询（轮询 REG_CH_INTR_RAW），不使用 MSI 中断。
  *
@@ -27,12 +31,16 @@ MODULE_AUTHOR("MT EMU Example");
 MODULE_DESCRIPTION("Minimal bare-metal MTDMA PCIe DMA example (polling mode)");
 MODULE_LICENSE("GPL v2");
 
-/* 测试传输大小：64 KB */
+/* 每次传输大小：64 KB */
 #define XFER_SIZE  (64 * 1024)
 
-/* 设备本地（DDR）目标地址：放在设备 DDR 偏移 0x100000 处，
- * 位于数据区（0x010000000000-0x01006fffffff），远离链表区（0x010070000000-0x01007fffffff）*/
-#define DEVICE_TEST_ADDR  0x010000100000ULL
+/*
+ * 设备 DDR 数据区基址（BAR2 数据区：0x010000000000-0x01006fffffff）。
+ * 每条通道对占 XFER_SIZE * MTDMA_BLOCK_CNT 字节，通道 i 的起始地址为：
+ *   DEVICE_DATA_BASE + i * DEVICE_DATA_CH_SIZE
+ */
+#define DEVICE_DATA_BASE     0x010000100000ULL
+#define DEVICE_DATA_CH_SIZE  ((u64)XFER_SIZE * MTDMA_BLOCK_CNT)
 
 /* =========================================================
  * § 1. 公共寄存器初始化
@@ -81,29 +89,34 @@ static void mtdma_comm_init(struct mtdma_dev *mdev)
 /* =========================================================
  * § 2. 通道初始化
  *
- * 计算各通道的 MMIO 基地址（rg_base）并初始化软件同步对象。
+ * 初始化 MTDMA_NUM_TEST_CH 对通道的 MMIO 基地址和软件同步对象。
  *
- * 寄存器地址计算规则（来自 build_dma_info()）：
+ * 寄存器地址计算规则：
  *   RD 通道 N：BAR0 + 0x33000 + N * 0x1000
  *   WR 通道 N：BAR0 + 0x33000 + N * 0x1000 + 0x800
  * ========================================================= */
 static void mtdma_chan_init(struct mtdma_dev *mdev)
 {
-	/* 通道 0，RD（Host→Device） */
-	mdev->rd_ch0.rg_base = mdev->bar0 + MTDMA_CHAN_BASE_OFFSET;
-	init_completion(&mdev->rd_ch0.xfer_done);
-	mutex_init(&mdev->rd_ch0.lock);
-	mdev->rd_ch0.last_error = 0;
+	int i;
 
-	/* 通道 0，WR（Device→Host） */
-	mdev->wr_ch0.rg_base = mdev->bar0 + MTDMA_CHAN_BASE_OFFSET + MTDMA_WR_CH_OFFSET;
-	init_completion(&mdev->wr_ch0.xfer_done);
-	mutex_init(&mdev->wr_ch0.lock);
-	mdev->wr_ch0.last_error = 0;
+	for (i = 0; i < MTDMA_NUM_TEST_CH; i++) {
+		mdev->rd_ch[i].rg_base = mdev->bar0 + MTDMA_CHAN_BASE_OFFSET
+					 + (unsigned long)i * MTDMA_CH_STRIDE;
+		init_completion(&mdev->rd_ch[i].xfer_done);
+		mutex_init(&mdev->rd_ch[i].lock);
+		mdev->rd_ch[i].last_error = 0;
 
-	dev_info(&mdev->pdev->dev,
-		 "MTDMA: rd_ch0 rg_base=%p  wr_ch0 rg_base=%p\n",
-		 mdev->rd_ch0.rg_base, mdev->wr_ch0.rg_base);
+		mdev->wr_ch[i].rg_base = mdev->bar0 + MTDMA_CHAN_BASE_OFFSET
+					 + (unsigned long)i * MTDMA_CH_STRIDE
+					 + MTDMA_WR_CH_OFFSET;
+		init_completion(&mdev->wr_ch[i].xfer_done);
+		mutex_init(&mdev->wr_ch[i].lock);
+		mdev->wr_ch[i].last_error = 0;
+
+		dev_info(&mdev->pdev->dev,
+			 "MTDMA: ch%d rd rg_base=%p  wr rg_base=%p\n",
+			 i, mdev->rd_ch[i].rg_base, mdev->wr_ch[i].rg_base);
+	}
 }
 
 /* =========================================================
@@ -186,6 +199,69 @@ static void mtdma_submit_single(struct mtdma_chan *ch,
 }
 
 /* =========================================================
+ * § 3b. 链式描述符 DMA 传输提交
+ *
+ * 支持 extra_descs >= 1，共 extra_descs+1 个描述符：
+ *   - 描述符 0：写入寄存器区（偏移 0x400），desc_op=CHAIN_EN
+ *   - 描述符 1..extra_descs-1：写入 BAR2 描述符链表区（ll_vaddr），desc_op=CHAIN_EN
+ *   - 描述符 extra_descs（末尾）：写入 BAR2 描述符链表区，desc_op=INTR_EN
+ *
+ * total_size 被均分到各描述符，最后一个描述符承担余量。
+ *
+ * @ll_vaddr  : BAR2 描述符链表区的内核虚拟地址（用于写入描述符内容）
+ * @ll_ddr    : 对应的设备 DDR 物理地址（写入 LAR 字段，硬件 fetch 时使用）
+ * @extra_descs: 除第 0 号外的额外描述符数（MTDMA_CHAIN_DESC_NUM - 1）
+ * ========================================================= */
+static void mtdma_submit_chain(struct mtdma_chan *ch,
+			       void __iomem *ll_vaddr, u64 ll_ddr,
+			       u64 sar, u64 dar, u32 total_size,
+			       u32 extra_descs, u32 dir_flags)
+{
+	const u32 dsz  = sizeof(struct mtdma_desc);
+	u32 each       = total_size / (extra_descs + 1);
+	u32 last_bytes = total_size - each * extra_descs;
+	struct mtdma_desc __iomem *d;
+	u64 s = sar, t = dar;
+	u32 i;
+
+	if (WARN_ON(each == 0))
+		return;
+
+	/* LBAR_BASIC: [31:16]=额外描述符数, [0]=chain_en=1 */
+	ch_writel(ch, REG_CH_LBAR_BASIC, (extra_descs << 16) | 1);
+	ch_writel(ch, REG_CH_INTR_IMSK,  0);
+
+	for (i = 0; i <= extra_descs; i++) {
+		u32 bytes = (i == extra_descs) ? last_bytes : each;
+		/* desc i+1（下一个）的设备 DDR 地址，用于当前描述符的 LAR */
+		u64 lar = (i < extra_descs) ? ll_ddr + (u64)i * dsz : 0;
+		u32 op  = (i < extra_descs) ? DESC_CHAIN_EN : DESC_INTR_EN;
+
+		if (i == 0)
+			d = (struct mtdma_desc __iomem *)(ch->rg_base + REG_CH_DESC_OPT);
+		else
+			d = (struct mtdma_desc __iomem *)(ll_vaddr + (u64)(i - 1) * dsz);
+
+		desc_writel(d, desc_op, op);
+		desc_writel(d, cnt,     bytes - 1);
+		desc_writel(d, sar_lo,  lower_32_bits(s));
+		desc_writel(d, sar_hi,  upper_32_bits(s));
+		desc_writel(d, dar_lo,  lower_32_bits(t));
+		desc_writel(d, dar_hi,  upper_32_bits(t));
+		desc_writel(d, lar_lo,  lower_32_bits(lar));
+		desc_writel(d, lar_hi,  upper_32_bits(lar));
+
+		s += each;
+		t += each;
+	}
+
+	ch_writel(ch, REG_CH_DIRECTION, dir_flags);
+	ch_writel(ch, REG_CH_ENABLE,    dir_flags);
+	(void)ch_readl(ch, REG_CH_ENABLE);   /* read-back flush */
+	ch_writel(ch, REG_CH_ENABLE,    dir_flags | CH_EN_ENABLE);
+}
+
+/* =========================================================
  * § 4. 寄存器轮询等待 DMA 完成
  *
  * 替代中断方式：周期性读取 REG_CH_INTR_RAW 直到 CH_INTR_DONE
@@ -237,121 +313,595 @@ static int mtdma_poll_done(struct mtdma_chan *ch)
 }
 
 /* =========================================================
- * § 5. 完整的 H2D + D2H 功能测试
- *
- * 流程：
- *   1. 分配主机侧 DMA 相干内存（host_buf）
- *   2. H2D：用 RD 通道把 host_buf → 设备 DDR 0x100000
- *   3. D2H：用 WR 通道把 设备 DDR 0x100000 → host_buf2
- *   4. 验证数据正确性
- *   5. 释放内存
- *
- * 完成检测：寄存器轮询（mtdma_poll_done），不使用 MSI 中断。
+ * § 5. 地址辅助函数
  * ========================================================= */
-static int mtdma_run_selftest(struct mtdma_dev *mdev)
+
+/*
+ * 返回通道 ch_idx 的描述符链表区在 BAR2 中的内核虚拟地址。
+ * is_wr=0 → RD 通道，is_wr=1 → WR 通道。
+ * 布局：每个槽 MTDMA_LL_CH_STRIDE 字节，顺序为 rd0, wr0, rd1, wr1 …
+ */
+static inline void __iomem *ch_ll_vaddr(struct mtdma_dev *mdev,
+					int ch_idx, int is_wr)
 {
-	dma_addr_t h2d_bus_addr, d2h_bus_addr;
-	void      *h2d_buf, *d2h_buf;
-	int        i, ret = 0;
+	return mdev->bar2 + MTDMA_DESC_LIST_BASE
+	       + (unsigned long)(2 * ch_idx + is_wr) * MTDMA_LL_CH_STRIDE;
+}
 
-	/* 分配主机侧相干 DMA 内存（不经 IOMMU，物理地址直接可用）*/
+/*
+ * 返回同一槽的设备 DDR 物理地址（BAR2 offset → 0x010000000000 + offset）。
+ */
+static inline u64 ch_ll_ddr(int ch_idx, int is_wr)
+{
+	return 0x010000000000ULL + MTDMA_DESC_LIST_BASE
+	       + (u64)(2 * ch_idx + is_wr) * MTDMA_LL_CH_STRIDE;
+}
+
+/*
+ * 返回通道 ch_idx 在块 block_idx 中使用的设备 DDR 数据地址。
+ */
+static inline u64 ch_dev_addr(int ch_idx, int block_idx)
+{
+	return DEVICE_DATA_BASE
+	       + (u64)ch_idx  * DEVICE_DATA_CH_SIZE
+	       + (u64)block_idx * XFER_SIZE;
+}
+
+/* =========================================================
+ * § 6. 六种测试用例
+ *
+ * 命名约定：
+ *   test_single_1ch — Test 1: single task  in single chain（单描述符，单通道）
+ *   test_chain_1ch  — Test 2: chain mode   in single chain（链式，单通道）
+ *   test_block_1ch  — Test 3: chain block  in single chain（块链式，单通道）
+ *   test_single_2ch — Test 4: single task  in multi chain （单描述符，双通道并行）
+ *   test_chain_2ch  — Test 5: chain mode   in multi chain （链式，双通道并行）
+ *   test_block_2ch  — Test 6: chain block  in multi chain （块链式，双通道并行）
+ *
+ * 每个测试函数：
+ *   - 分配主机相干 DMA 内存
+ *   - 填充特征数据
+ *   - H2D（主机→设备）传输，轮询完成
+ *   - D2H（设备→主机）传输，轮询完成
+ *   - memcmp 验证数据一致性
+ *   - 释放内存
+ * ========================================================= */
+
+/* ---- Test 1: single task in single chain ---- */
+static int test_single_1ch(struct mtdma_dev *mdev)
+{
+	const u64 dev_addr = ch_dev_addr(0, 0);
+	dma_addr_t h2d_bus, d2h_bus;
+	void *h2d_buf, *d2h_buf;
+	int i, ret = 0;
+
+	dev_info(&mdev->pdev->dev,
+		 "Test 1: single task in single chain (size=%u)\n", XFER_SIZE);
+
 	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
-				     &h2d_bus_addr, GFP_KERNEL);
-	if (!h2d_buf) {
-		dev_err(&mdev->pdev->dev, "dma_alloc_coherent(h2d) failed\n");
+				     &h2d_bus, GFP_KERNEL);
+	if (!h2d_buf)
 		return -ENOMEM;
-	}
-
 	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
-				     &d2h_bus_addr, GFP_KERNEL);
+				     &d2h_bus, GFP_KERNEL);
 	if (!d2h_buf) {
-		dev_err(&mdev->pdev->dev, "dma_alloc_coherent(d2h) failed\n");
 		ret = -ENOMEM;
 		goto free_h2d;
 	}
 
-	/* 填充源数据 */
 	for (i = 0; i < XFER_SIZE / 4; i++)
-		((u32 *)h2d_buf)[i] = 0xABCD0000 + i;
+		((u32 *)h2d_buf)[i] = 0x11110000 + i;
 	memset(d2h_buf, 0, XFER_SIZE);
 
-	/* ---- 第一次传输：H2D（Host→Device，使用 RD 通道 0）---- */
-	dev_info(&mdev->pdev->dev,
-		 "MTDMA selftest: H2D  host_bus=0x%llx → dev=0x%llx  size=%u\n",
-		 (u64)h2d_bus_addr, DEVICE_TEST_ADDR, XFER_SIZE);
-
-	mutex_lock(&mdev->rd_ch0.lock);
-	/*
-	 * H2D：SAR = 主机物理地址，DAR = 设备 DDR 地址。
-	 * 方向标志 = 0（H2D 不需要 NOCROSS / DUMMY）。
-	 */
-	mtdma_submit_single(&mdev->rd_ch0,
-			    (u64)h2d_bus_addr, DEVICE_TEST_ADDR,
-			    XFER_SIZE, 0);
-
-	/* 轮询等待 H2D 完成 */
-	ret = mtdma_poll_done(&mdev->rd_ch0);
-	mutex_unlock(&mdev->rd_ch0.lock);
-
-	if (ret == -ETIMEDOUT) {
-		dev_err(&mdev->pdev->dev, "MTDMA H2D timeout!\n");
-		goto free_d2h;
-	}
+	mutex_lock(&mdev->rd_ch[0].lock);
+	mtdma_submit_single(&mdev->rd_ch[0],
+			    (u64)h2d_bus, dev_addr, XFER_SIZE, 0);
+	ret = mtdma_poll_done(&mdev->rd_ch[0]);
+	mutex_unlock(&mdev->rd_ch[0].lock);
 	if (ret) {
-		dev_err(&mdev->pdev->dev, "MTDMA H2D error=0x%x\n",
-			mdev->rd_ch0.last_error);
+		dev_err(&mdev->pdev->dev, "Test 1 H2D failed: %d\n", ret);
 		goto free_d2h;
 	}
-	dev_info(&mdev->pdev->dev, "MTDMA H2D done OK\n");
 
-	/* ---- 第二次传输：D2H（Device→Host，使用 WR 通道 0）---- */
-	dev_info(&mdev->pdev->dev,
-		 "MTDMA selftest: D2H  dev=0x%llx → host_bus=0x%llx  size=%u\n",
-		 DEVICE_TEST_ADDR, (u64)d2h_bus_addr, XFER_SIZE);
-
-	mutex_lock(&mdev->wr_ch0.lock);
-	/*
-	 * D2H：SAR = 设备 DDR 地址，DAR = 主机物理地址。
-	 * 方向标志 = CH_EN_DUMMY（D2H 需要 dummy read 保证主机侧数据可见）。
-	 */
-	mtdma_submit_single(&mdev->wr_ch0,
-			    DEVICE_TEST_ADDR, (u64)d2h_bus_addr,
-			    XFER_SIZE, CH_EN_DUMMY);
-
-	/* 轮询等待 D2H 完成 */
-	ret = mtdma_poll_done(&mdev->wr_ch0);
-	mutex_unlock(&mdev->wr_ch0.lock);
-
-	if (ret == -ETIMEDOUT) {
-		dev_err(&mdev->pdev->dev, "MTDMA D2H timeout!\n");
-		goto free_d2h;
-	}
+	mutex_lock(&mdev->wr_ch[0].lock);
+	mtdma_submit_single(&mdev->wr_ch[0],
+			    dev_addr, (u64)d2h_bus, XFER_SIZE, CH_EN_DUMMY);
+	ret = mtdma_poll_done(&mdev->wr_ch[0]);
+	mutex_unlock(&mdev->wr_ch[0].lock);
 	if (ret) {
-		dev_err(&mdev->pdev->dev, "MTDMA D2H error=0x%x\n",
-			mdev->wr_ch0.last_error);
+		dev_err(&mdev->pdev->dev, "Test 1 D2H failed: %d\n", ret);
 		goto free_d2h;
 	}
-	dev_info(&mdev->pdev->dev, "MTDMA D2H done OK\n");
 
-	/* 数据校验 */
-	if (memcmp(h2d_buf, d2h_buf, XFER_SIZE) == 0) {
-		dev_info(&mdev->pdev->dev,
-			 "MTDMA selftest PASSED: H2D/D2H data match\n");
-	} else {
-		dev_err(&mdev->pdev->dev,
-			"MTDMA selftest FAILED: data mismatch!\n");
-		ret = -EBADMSG;
-	}
+	ret = memcmp(h2d_buf, d2h_buf, XFER_SIZE) ? -EBADMSG : 0;
+	dev_info(&mdev->pdev->dev, "Test 1 %s\n", ret ? "FAILED" : "PASSED");
 
 free_d2h:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, d2h_buf, d2h_bus_addr);
+	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, d2h_buf, d2h_bus);
 free_h2d:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, h2d_buf, h2d_bus_addr);
+	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, h2d_buf, h2d_bus);
+	return ret;
+}
+
+/* ---- Test 2: chain mode in single chain ---- */
+static int test_chain_1ch(struct mtdma_dev *mdev)
+{
+	const u32 extra   = MTDMA_CHAIN_DESC_NUM - 1;
+	const u64 dev_addr = ch_dev_addr(0, 0);
+	void __iomem *rd_ll = ch_ll_vaddr(mdev, 0, 0);
+	void __iomem *wr_ll = ch_ll_vaddr(mdev, 0, 1);
+	u64 rd_ddr = ch_ll_ddr(0, 0);
+	u64 wr_ddr = ch_ll_ddr(0, 1);
+	dma_addr_t h2d_bus, d2h_bus;
+	void *h2d_buf, *d2h_buf;
+	int i, ret = 0;
+
+	dev_info(&mdev->pdev->dev,
+		 "Test 2: chain mode in single chain (%u descs, size=%u)\n",
+		 MTDMA_CHAIN_DESC_NUM, XFER_SIZE);
+
+	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+				     &h2d_bus, GFP_KERNEL);
+	if (!h2d_buf)
+		return -ENOMEM;
+	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+				     &d2h_bus, GFP_KERNEL);
+	if (!d2h_buf) {
+		ret = -ENOMEM;
+		goto free_h2d;
+	}
+
+	for (i = 0; i < XFER_SIZE / 4; i++)
+		((u32 *)h2d_buf)[i] = 0x22220000 + i;
+	memset(d2h_buf, 0, XFER_SIZE);
+
+	mutex_lock(&mdev->rd_ch[0].lock);
+	mtdma_submit_chain(&mdev->rd_ch[0], rd_ll, rd_ddr,
+			   (u64)h2d_bus, dev_addr, XFER_SIZE, extra, 0);
+	ret = mtdma_poll_done(&mdev->rd_ch[0]);
+	mutex_unlock(&mdev->rd_ch[0].lock);
+	if (ret) {
+		dev_err(&mdev->pdev->dev, "Test 2 H2D failed: %d\n", ret);
+		goto free_d2h;
+	}
+
+	mutex_lock(&mdev->wr_ch[0].lock);
+	mtdma_submit_chain(&mdev->wr_ch[0], wr_ll, wr_ddr,
+			   dev_addr, (u64)d2h_bus, XFER_SIZE, extra,
+			   CH_EN_DUMMY);
+	ret = mtdma_poll_done(&mdev->wr_ch[0]);
+	mutex_unlock(&mdev->wr_ch[0].lock);
+	if (ret) {
+		dev_err(&mdev->pdev->dev, "Test 2 D2H failed: %d\n", ret);
+		goto free_d2h;
+	}
+
+	ret = memcmp(h2d_buf, d2h_buf, XFER_SIZE) ? -EBADMSG : 0;
+	dev_info(&mdev->pdev->dev, "Test 2 %s\n", ret ? "FAILED" : "PASSED");
+
+free_d2h:
+	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, d2h_buf, d2h_bus);
+free_h2d:
+	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, h2d_buf, h2d_bus);
+	return ret;
+}
+
+/* ---- Test 3: chain block mode in single chain ---- */
+static int test_block_1ch(struct mtdma_dev *mdev)
+{
+	const u32 extra    = MTDMA_CHAIN_DESC_NUM - 1;
+	const u32 total    = XFER_SIZE * MTDMA_BLOCK_CNT;
+	void __iomem *rd_ll = ch_ll_vaddr(mdev, 0, 0);
+	void __iomem *wr_ll = ch_ll_vaddr(mdev, 0, 1);
+	u64 rd_ddr = ch_ll_ddr(0, 0);
+	u64 wr_ddr = ch_ll_ddr(0, 1);
+	dma_addr_t h2d_bus, d2h_bus;
+	void *h2d_buf, *d2h_buf;
+	int i, j, ret = 0;
+
+	dev_info(&mdev->pdev->dev,
+		 "Test 3: chain block mode in single chain (%u blocks x %u descs, size=%u/block)\n",
+		 MTDMA_BLOCK_CNT, MTDMA_CHAIN_DESC_NUM, XFER_SIZE);
+
+	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, total, &h2d_bus,
+				     GFP_KERNEL);
+	if (!h2d_buf)
+		return -ENOMEM;
+	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, total, &d2h_bus,
+				     GFP_KERNEL);
+	if (!d2h_buf) {
+		ret = -ENOMEM;
+		goto free_h2d;
+	}
+
+	for (i = 0; i < total / 4; i++)
+		((u32 *)h2d_buf)[i] = 0x33330000 + i;
+	memset(d2h_buf, 0, total);
+
+	for (j = 0; j < MTDMA_BLOCK_CNT; j++) {
+		u64 dev_addr = ch_dev_addr(0, j);
+		dma_addr_t h2d_blk = h2d_bus + (dma_addr_t)j * XFER_SIZE;
+		dma_addr_t d2h_blk = d2h_bus + (dma_addr_t)j * XFER_SIZE;
+
+		mutex_lock(&mdev->rd_ch[0].lock);
+		mtdma_submit_chain(&mdev->rd_ch[0], rd_ll, rd_ddr,
+				   (u64)h2d_blk, dev_addr, XFER_SIZE, extra,
+				   0);
+		ret = mtdma_poll_done(&mdev->rd_ch[0]);
+		mutex_unlock(&mdev->rd_ch[0].lock);
+		if (ret) {
+			dev_err(&mdev->pdev->dev,
+				"Test 3 H2D block %d failed: %d\n", j, ret);
+			goto free_d2h;
+		}
+
+		mutex_lock(&mdev->wr_ch[0].lock);
+		mtdma_submit_chain(&mdev->wr_ch[0], wr_ll, wr_ddr,
+				   dev_addr, (u64)d2h_blk, XFER_SIZE, extra,
+				   CH_EN_DUMMY);
+		ret = mtdma_poll_done(&mdev->wr_ch[0]);
+		mutex_unlock(&mdev->wr_ch[0].lock);
+		if (ret) {
+			dev_err(&mdev->pdev->dev,
+				"Test 3 D2H block %d failed: %d\n", j, ret);
+			goto free_d2h;
+		}
+	}
+
+	ret = memcmp(h2d_buf, d2h_buf, total) ? -EBADMSG : 0;
+	dev_info(&mdev->pdev->dev, "Test 3 %s\n", ret ? "FAILED" : "PASSED");
+
+free_d2h:
+	dma_free_coherent(&mdev->pdev->dev, total, d2h_buf, d2h_bus);
+free_h2d:
+	dma_free_coherent(&mdev->pdev->dev, total, h2d_buf, h2d_bus);
+	return ret;
+}
+
+/* ---- Test 4: single task in multi chain ---- */
+static int test_single_2ch(struct mtdma_dev *mdev)
+{
+	dma_addr_t h2d_bus[MTDMA_NUM_TEST_CH], d2h_bus[MTDMA_NUM_TEST_CH];
+	void *h2d_buf[MTDMA_NUM_TEST_CH], *d2h_buf[MTDMA_NUM_TEST_CH];
+	int i, ch, ret = 0;
+
+	memset(h2d_buf, 0, sizeof(h2d_buf));
+	memset(d2h_buf, 0, sizeof(d2h_buf));
+
+	dev_info(&mdev->pdev->dev,
+		 "Test 4: single task in multi chain (%d channels, size=%u)\n",
+		 MTDMA_NUM_TEST_CH, XFER_SIZE);
+
+	/* Allocate buffers for all channels */
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		h2d_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+						 &h2d_bus[ch], GFP_KERNEL);
+		if (!h2d_buf[ch]) {
+			ret = -ENOMEM;
+			goto free_ch;
+		}
+		d2h_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+						 &d2h_bus[ch], GFP_KERNEL);
+		if (!d2h_buf[ch]) {
+			ret = -ENOMEM;
+			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+					  h2d_buf[ch], h2d_bus[ch]);
+			h2d_buf[ch] = NULL;
+			goto free_ch;
+		}
+		for (i = 0; i < XFER_SIZE / 4; i++)
+			((u32 *)h2d_buf[ch])[i] = 0x44440000 + ch * 0x10000 + i;
+		memset(d2h_buf[ch], 0, XFER_SIZE);
+	}
+
+	/* Submit H2D for all channels, then poll all */
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		mutex_lock(&mdev->rd_ch[ch].lock);
+		mtdma_submit_single(&mdev->rd_ch[ch],
+				    (u64)h2d_bus[ch], ch_dev_addr(ch, 0),
+				    XFER_SIZE, 0);
+	}
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		int r = mtdma_poll_done(&mdev->rd_ch[ch]);
+
+		mutex_unlock(&mdev->rd_ch[ch].lock);
+		if (r && !ret) {
+			dev_err(&mdev->pdev->dev,
+				"Test 4 H2D ch%d failed: %d\n", ch, r);
+			ret = r;
+		}
+	}
+	if (ret)
+		goto free_ch;
+
+	/* Submit D2H for all channels, then poll all */
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		mutex_lock(&mdev->wr_ch[ch].lock);
+		mtdma_submit_single(&mdev->wr_ch[ch],
+				    ch_dev_addr(ch, 0), (u64)d2h_bus[ch],
+				    XFER_SIZE, CH_EN_DUMMY);
+	}
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		int r = mtdma_poll_done(&mdev->wr_ch[ch]);
+
+		mutex_unlock(&mdev->wr_ch[ch].lock);
+		if (r && !ret) {
+			dev_err(&mdev->pdev->dev,
+				"Test 4 D2H ch%d failed: %d\n", ch, r);
+			ret = r;
+		}
+	}
+	if (ret)
+		goto free_ch;
+
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		if (memcmp(h2d_buf[ch], d2h_buf[ch], XFER_SIZE)) {
+			dev_err(&mdev->pdev->dev,
+				"Test 4 data mismatch ch%d\n", ch);
+			ret = -EBADMSG;
+		}
+	}
+	dev_info(&mdev->pdev->dev, "Test 4 %s\n", ret ? "FAILED" : "PASSED");
+
+free_ch:
+	for (ch = MTDMA_NUM_TEST_CH - 1; ch >= 0; ch--) {
+		if (d2h_buf[ch])
+			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+					  d2h_buf[ch], d2h_bus[ch]);
+		if (h2d_buf[ch])
+			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+					  h2d_buf[ch], h2d_bus[ch]);
+	}
+	return ret;
+}
+
+/* ---- Test 5: chain mode in multi chain ---- */
+static int test_chain_2ch(struct mtdma_dev *mdev)
+{
+	const u32 extra = MTDMA_CHAIN_DESC_NUM - 1;
+	dma_addr_t h2d_bus[MTDMA_NUM_TEST_CH], d2h_bus[MTDMA_NUM_TEST_CH];
+	void *h2d_buf[MTDMA_NUM_TEST_CH], *d2h_buf[MTDMA_NUM_TEST_CH];
+	int i, ch, ret = 0;
+
+	memset(h2d_buf, 0, sizeof(h2d_buf));
+	memset(d2h_buf, 0, sizeof(d2h_buf));
+
+	dev_info(&mdev->pdev->dev,
+		 "Test 5: chain mode in multi chain (%d channels, %u descs, size=%u)\n",
+		 MTDMA_NUM_TEST_CH, MTDMA_CHAIN_DESC_NUM, XFER_SIZE);
+
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		h2d_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+						 &h2d_bus[ch], GFP_KERNEL);
+		if (!h2d_buf[ch]) {
+			ret = -ENOMEM;
+			goto free_ch;
+		}
+		d2h_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+						 &d2h_bus[ch], GFP_KERNEL);
+		if (!d2h_buf[ch]) {
+			ret = -ENOMEM;
+			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+					  h2d_buf[ch], h2d_bus[ch]);
+			h2d_buf[ch] = NULL;
+			goto free_ch;
+		}
+		for (i = 0; i < XFER_SIZE / 4; i++)
+			((u32 *)h2d_buf[ch])[i] = 0x55550000 + ch * 0x10000 + i;
+		memset(d2h_buf[ch], 0, XFER_SIZE);
+	}
+
+	/* Submit H2D chains on all channels, then poll all */
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		mutex_lock(&mdev->rd_ch[ch].lock);
+		mtdma_submit_chain(&mdev->rd_ch[ch],
+				   ch_ll_vaddr(mdev, ch, 0), ch_ll_ddr(ch, 0),
+				   (u64)h2d_bus[ch], ch_dev_addr(ch, 0),
+				   XFER_SIZE, extra, 0);
+	}
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		int r = mtdma_poll_done(&mdev->rd_ch[ch]);
+
+		mutex_unlock(&mdev->rd_ch[ch].lock);
+		if (r && !ret) {
+			dev_err(&mdev->pdev->dev,
+				"Test 5 H2D ch%d failed: %d\n", ch, r);
+			ret = r;
+		}
+	}
+	if (ret)
+		goto free_ch;
+
+	/* Submit D2H chains on all channels, then poll all */
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		mutex_lock(&mdev->wr_ch[ch].lock);
+		mtdma_submit_chain(&mdev->wr_ch[ch],
+				   ch_ll_vaddr(mdev, ch, 1), ch_ll_ddr(ch, 1),
+				   ch_dev_addr(ch, 0), (u64)d2h_bus[ch],
+				   XFER_SIZE, extra, CH_EN_DUMMY);
+	}
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		int r = mtdma_poll_done(&mdev->wr_ch[ch]);
+
+		mutex_unlock(&mdev->wr_ch[ch].lock);
+		if (r && !ret) {
+			dev_err(&mdev->pdev->dev,
+				"Test 5 D2H ch%d failed: %d\n", ch, r);
+			ret = r;
+		}
+	}
+	if (ret)
+		goto free_ch;
+
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		if (memcmp(h2d_buf[ch], d2h_buf[ch], XFER_SIZE)) {
+			dev_err(&mdev->pdev->dev,
+				"Test 5 data mismatch ch%d\n", ch);
+			ret = -EBADMSG;
+		}
+	}
+	dev_info(&mdev->pdev->dev, "Test 5 %s\n", ret ? "FAILED" : "PASSED");
+
+free_ch:
+	for (ch = MTDMA_NUM_TEST_CH - 1; ch >= 0; ch--) {
+		if (d2h_buf[ch])
+			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+					  d2h_buf[ch], d2h_bus[ch]);
+		if (h2d_buf[ch])
+			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+					  h2d_buf[ch], h2d_bus[ch]);
+	}
+	return ret;
+}
+
+/* ---- Test 6: chain block mode in multi chain ---- */
+static int test_block_2ch(struct mtdma_dev *mdev)
+{
+	const u32 extra = MTDMA_CHAIN_DESC_NUM - 1;
+	const u32 total  = XFER_SIZE * MTDMA_BLOCK_CNT;
+	dma_addr_t h2d_bus[MTDMA_NUM_TEST_CH], d2h_bus[MTDMA_NUM_TEST_CH];
+	void *h2d_buf[MTDMA_NUM_TEST_CH], *d2h_buf[MTDMA_NUM_TEST_CH];
+	int i, j, ch, ret = 0;
+
+	memset(h2d_buf, 0, sizeof(h2d_buf));
+	memset(d2h_buf, 0, sizeof(d2h_buf));
+
+	dev_info(&mdev->pdev->dev,
+		 "Test 6: chain block mode in multi chain (%d channels, %u blocks x %u descs)\n",
+		 MTDMA_NUM_TEST_CH, MTDMA_BLOCK_CNT, MTDMA_CHAIN_DESC_NUM);
+
+	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+		h2d_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, total,
+						 &h2d_bus[ch], GFP_KERNEL);
+		if (!h2d_buf[ch]) {
+			ret = -ENOMEM;
+			goto free_ch;
+		}
+		d2h_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, total,
+						 &d2h_bus[ch], GFP_KERNEL);
+		if (!d2h_buf[ch]) {
+			ret = -ENOMEM;
+			dma_free_coherent(&mdev->pdev->dev, total,
+					  h2d_buf[ch], h2d_bus[ch]);
+			h2d_buf[ch] = NULL;
+			goto free_ch;
+		}
+		for (i = 0; i < total / 4; i++)
+			((u32 *)h2d_buf[ch])[i] = 0x66660000 + ch * 0x10000 + i;
+		memset(d2h_buf[ch], 0, total);
+	}
+
+	/*
+	 * 对每个块顺序执行：先提交所有通道的 H2D 并行等待完成，
+	 * 再提交所有通道的 D2H 并行等待完成。
+	 */
+	for (j = 0; j < MTDMA_BLOCK_CNT && !ret; j++) {
+		/* H2D: submit all channels for block j, then poll all */
+		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+			dma_addr_t h2d_blk = h2d_bus[ch] + (dma_addr_t)j * XFER_SIZE;
+
+			mutex_lock(&mdev->rd_ch[ch].lock);
+			mtdma_submit_chain(&mdev->rd_ch[ch],
+					   ch_ll_vaddr(mdev, ch, 0),
+					   ch_ll_ddr(ch, 0),
+					   (u64)h2d_blk,
+					   ch_dev_addr(ch, j),
+					   XFER_SIZE, extra, 0);
+		}
+		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+			int r = mtdma_poll_done(&mdev->rd_ch[ch]);
+
+			mutex_unlock(&mdev->rd_ch[ch].lock);
+			if (r && !ret) {
+				dev_err(&mdev->pdev->dev,
+					"Test 6 H2D ch%d blk%d failed: %d\n",
+					ch, j, r);
+				ret = r;
+			}
+		}
+		if (ret)
+			break;
+
+		/* D2H: submit all channels for block j, then poll all */
+		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+			dma_addr_t d2h_blk = d2h_bus[ch] + (dma_addr_t)j * XFER_SIZE;
+
+			mutex_lock(&mdev->wr_ch[ch].lock);
+			mtdma_submit_chain(&mdev->wr_ch[ch],
+					   ch_ll_vaddr(mdev, ch, 1),
+					   ch_ll_ddr(ch, 1),
+					   ch_dev_addr(ch, j),
+					   (u64)d2h_blk,
+					   XFER_SIZE, extra, CH_EN_DUMMY);
+		}
+		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+			int r = mtdma_poll_done(&mdev->wr_ch[ch]);
+
+			mutex_unlock(&mdev->wr_ch[ch].lock);
+			if (r && !ret) {
+				dev_err(&mdev->pdev->dev,
+					"Test 6 D2H ch%d blk%d failed: %d\n",
+					ch, j, r);
+				ret = r;
+			}
+		}
+	}
+
+	if (!ret) {
+		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
+			if (memcmp(h2d_buf[ch], d2h_buf[ch], total)) {
+				dev_err(&mdev->pdev->dev,
+					"Test 6 data mismatch ch%d\n", ch);
+				ret = -EBADMSG;
+			}
+		}
+	}
+	dev_info(&mdev->pdev->dev, "Test 6 %s\n", ret ? "FAILED" : "PASSED");
+
+free_ch:
+	for (ch = MTDMA_NUM_TEST_CH - 1; ch >= 0; ch--) {
+		if (d2h_buf[ch])
+			dma_free_coherent(&mdev->pdev->dev, total,
+					  d2h_buf[ch], d2h_bus[ch]);
+		if (h2d_buf[ch])
+			dma_free_coherent(&mdev->pdev->dev, total,
+					  h2d_buf[ch], h2d_bus[ch]);
+	}
 	return ret;
 }
 
 /* =========================================================
- * § 6. PCI probe / remove
+ * § 7. 运行全部六种测试
+ * ========================================================= */
+static int mtdma_run_selftest(struct mtdma_dev *mdev)
+{
+	int ret;
+
+	ret = test_single_1ch(mdev);
+	if (ret)
+		return ret;
+
+	ret = test_chain_1ch(mdev);
+	if (ret)
+		return ret;
+
+	ret = test_block_1ch(mdev);
+	if (ret)
+		return ret;
+
+	ret = test_single_2ch(mdev);
+	if (ret)
+		return ret;
+
+	ret = test_chain_2ch(mdev);
+	if (ret)
+		return ret;
+
+	return test_block_2ch(mdev);
+}
+
+/* =========================================================
+ * § 8. PCI probe / remove
  * ========================================================= */
 static int mtdma_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
@@ -419,7 +969,7 @@ static void mtdma_remove(struct pci_dev *pdev)
 }
 
 /* =========================================================
- * § 7. 模块入口
+ * § 9. 模块入口
  * ========================================================= */
 static const struct pci_device_id mtdma_pci_tbl[] = {
 	{ PCI_DEVICE(MTDMA_PCI_VENDOR_ID, MTDMA_PCI_DEVICE_ID_GPU)  },

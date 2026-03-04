@@ -167,19 +167,35 @@ struct mtdma_chan {
 #define MTDMA_PCI_DEVICE_ID_HS     0x0680
 #define MTDMA_NUM_DMA_CH           64
 
+/* =========================================================
+ * 九、6 种测试用例参数
+ *
+ * 通道数量：MTDMA_NUM_TEST_CH 定义 multi-chain 测试使用的通道对数。
+ * 链式描述符：MTDMA_CHAIN_DESC_NUM 为每次链式传输的总描述符数（含第 0 号）。
+ * 块模式：MTDMA_BLOCK_CNT 为 chain block mode 中顺序执行的块数。
+ * 描述符链表区：每条通道在 BAR2 描述符区占 MTDMA_LL_CH_STRIDE 字节。
+ *   布局（per channel pair, 共 MTDMA_NUM_TEST_CH 对）：
+ *     rd_ch[i]: BAR2 offset = MTDMA_DESC_LIST_BASE + (2*i)   * MTDMA_LL_CH_STRIDE
+ *     wr_ch[i]: BAR2 offset = MTDMA_DESC_LIST_BASE + (2*i+1) * MTDMA_LL_CH_STRIDE
+ * ========================================================= */
+#define MTDMA_NUM_TEST_CH       2           /* multi-chain 测试通道对数（硬件支持更多，此处取最小并行数）*/
+#define MTDMA_CHAIN_DESC_NUM    4           /* chain mode 每次传输总描述符数（含 reg-area 第 0 号）*/
+#define MTDMA_BLOCK_CNT         4           /* chain block mode 块数（每块独立链式传输，轮询后再提交）*/
+#define MTDMA_LL_CH_STRIDE      0x10000UL   /* 每通道描述符链表区 64 KB（远大于 CHAIN_DESC_NUM×32B）*/
+
 struct mtdma_dev {
 	struct pci_dev  *pdev;
 	void __iomem    *bar0;          /* BAR0 虚拟地址（控制寄存器区）*/
 	void __iomem    *bar2;          /* BAR2 虚拟地址（设备 DDR 访问窗口，用于写链表）*/
 	void __iomem    *comm_base;     /* = bar0 + MTDMA_COMM_BASE_OFFSET */
 
-	/* 通道 0（RD=Host→Device，WR=Device→Host），此示例只使用各一条 */
-	struct mtdma_chan rd_ch0;       /* Host→Device（PCIe Read 通道） */
-	struct mtdma_chan wr_ch0;       /* Device→Host（PCIe Write 通道） */
+	/* MTDMA_NUM_TEST_CH 组通道（RD=Host→Device，WR=Device→Host）*/
+	struct mtdma_chan rd_ch[MTDMA_NUM_TEST_CH];
+	struct mtdma_chan wr_ch[MTDMA_NUM_TEST_CH];
 };
 
 /* =========================================================
- * 九、内联辅助宏
+ * 十、内联辅助宏
  * ========================================================= */
 /* 通道寄存器读写 */
 #define ch_writel(ch, reg, val)   writel((val),   (ch)->rg_base + (reg))
