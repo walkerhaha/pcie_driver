@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # Makefile for standalone bare-metal MTDMA example kernel module
 
-obj-m := mtdma_baremetal.o
+obj-m := mtdma_baremetal.o test2_chain_debug.o
 
 KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
 
