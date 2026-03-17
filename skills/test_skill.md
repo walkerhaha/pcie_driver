@@ -225,6 +225,107 @@ void dma_bare_simple_test(
 > - `data_direction_bits` 使用 `BIT()` 位掩码，可在一次调用中验证多个方向。
 > - `dma_bare_simple_test` 会自动为每个通道将 `device_sar` 和 `device_dar` 各递增 `size`。
 
+### 3.6 完整 API 列表（`test/lib/mt_pcie_f.h`）
+
+所有对外接口均显式列出，便于人为更新：
+
+```c
+/* ── 初始化 / 清理 ─────────────────────────────────────── */
+void pcief_init();           /* 打开所有设备节点、mmap BAR 区域 */
+void pcief_uninit();         /* 关闭所有文件描述符，释放映射 */
+
+/* ── 设备信息查询 ──────────────────────────────────────── */
+struct pcief_bar *pcief_get_barinfo(uint8_t fun, uint8_t bar);
+/* 返回 bar_paddr / bar_vaddr / bar_size / bar_map_addr */
+
+int pcief_get_vf__num();     /* 返回已探测到的 VF 数量（注意：双下划线，与源码一致） */
+uint64_t pcief_vf_base_addr(int vf); /* 返回第 vf 个 VF 的 DDR 基地址 */
+int pcief_mtdma_pf_ch_num(); /* 返回 PF DMA 通道数 */
+
+/* ── BAR 寄存器读写（普通映射 mmap） ─────────────────────── */
+int pcief_write  (uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void *data);
+int pcief_write_s(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void *data, uint32_t type);
+int pcief_read   (uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void *data);
+int pcief_read_s (uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void *data, uint32_t type);
+
+/* ── IO 寄存器读写（ioctl 方式，不依赖 mmap） ─────────────── */
+int pcief_io_write(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void *data);
+int pcief_io_read (uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void *data);
+
+/* ── PCI 配置空间读写 ─────────────────────────────────── */
+int pcief_cfg_write(uint8_t fun, uint32_t offset, uint32_t len, void *data);
+int pcief_cfg_read (uint8_t fun, uint32_t offset, uint32_t len, void *data);
+
+/* ── 扩展 ROM 读取 ────────────────────────────────────── */
+int pcief_read_exp_rom(uint32_t len, void *data);
+
+/* ── DMA 缓冲区管理（主机侧预留内存） ──────────────────── */
+long pcief_dmabuf_malloc(uint64_t len);    /* 分配，返回物理地址；失败返回 0 */
+void pcief_dmabuf_free  (long addr);
+int  pcief_dmabuf_write (uint64_t offset, uint32_t len, void *data);
+int  pcief_dmabuf_read  (uint64_t offset, uint32_t len, void *data);
+void pcief_get_mtdma_info(uint64_t *pa, uint64_t *ma, uint64_t *size);
+/* 获取 DMA 缓冲区：物理地址 / mmap 地址 / 大小 */
+
+/* ── 裸机 DMA 传输（核心接口） ─────────────────────────── */
+int pcief_dma_bare_xfer(
+    uint32_t data_direction,  /* DMA_MEM_TO_DEV / DMA_DEV_TO_MEM / DMA_DEV_TO_DEV / DMA_MEM_TO_MEM */
+    uint32_t desc_direction,  /* DMA_DESC_IN_DEVICE(0) 或 DMA_DESC_IN_HOST(1) */
+    uint32_t desc_cnt,        /* N-1；单描述符填 0 */
+    uint32_t block_cnt,       /* 块数量；0=不使用块模式 */
+    uint32_t ch_num,          /* 通道号 0-63 */
+    uint64_t sar,             /* 源地址 */
+    uint64_t dar,             /* 目的地址 */
+    uint32_t size,            /* 传输字节数 */
+    uint32_t timeout_ms       /* 超时，推荐 cal_timeout(size) */
+);
+
+/* ── DMA Engine 传输（高层封装） ────────────────────────── */
+void *pcief_mtdma_engine_malloc(uint32_t size); /* 分配 Engine 传输缓冲区 */
+void  pcief_mtdma_engine_free(void *ptr);
+int   pcief_mtdma_engine_start(int fun, struct mtdma_rw *info,
+                                void *rw_buf, uint32_t *done);
+
+/* ── 中断管理 ──────────────────────────────────────────── */
+int pcief_irq_init(uint8_t fun, uint8_t type, uint8_t test_mode);
+/* type: IRQ_DISABLE/IRQ_LEGACY/IRQ_MSI/IRQ_MSIX；test_mode=1 启用测试模式 */
+
+int pcief_dmaisr_set(uint8_t fun, uint8_t dmabare);
+/* dmabare=1：将 MSI-X 路由到裸机 DMA ISR */
+
+int pcief_wait_int(uint8_t fun, int irq, uint32_t *done, uint32_t timeout_ms);
+/* 阻塞等待指定 IRQ；返回 0 且 *done=1 表示成功 */
+
+int pcief_trig_int(uint8_t fun, int irq, uint32_t *done);
+/* 软件触发指定 IRQ（测试用） */
+
+/* ── 电源管理 ──────────────────────────────────────────── */
+int pcief_get_power(uint8_t fun, uint32_t *state);
+int pcief_suspend(uint8_t fun, uint32_t state);
+int pcief_resume(uint8_t fun);
+
+/* ── 目标设备 IPC（SMC / FEC / DSP） ──────────────────── */
+int pcief_tgt_sreg_u32     (uint8_t target, uint64_t address, uint32_t val);
+int pcief_tgt_post_sreg_u32(uint8_t target, uint64_t address, uint32_t val); /* 无需等待响应 */
+int pcief_tgt_greg_u32     (uint8_t target, uint64_t address, uint32_t *val);
+int pcief_tgt_wr           (uint8_t target, uint64_t address, void *data, uint32_t size);
+int pcief_tgt_rd           (uint8_t target, uint64_t address, void *data, uint32_t size);
+int pcief_tgt_wr_rand      (uint8_t target, uint64_t address, uint32_t size);
+int pcief_tgt_crc          (uint8_t target, uint64_t address, uint32_t size, uint32_t *val);
+int pcief_tgt_dma          (uint8_t target, uint8_t idx, uint8_t ch,
+                             uint64_t src, uint64_t dst, uint32_t size);
+int pcief_tgt_cache        (uint8_t target, uint32_t op, uint64_t start, uint64_t size);
+int pcief_tgt_mtdma_reset  (uint8_t target);
+int pcief_tgt_cmd          (uint8_t target, uint32_t *done, uint32_t timeout_ms);
+
+/* target 取值：PCIEF_TGT_DSP=0, PCIEF_TGT_FEC=1, PCIEF_TGT_SMC=2 */
+
+/* ── 实用函数 ──────────────────────────────────────────── */
+unsigned int make_crc(unsigned int crc, unsigned char *string, unsigned int size);
+long time_get_ms();
+int pcief_reg_mode(uint8_t bypass_secure);
+```
+
 ---
 
 ## 4. 测试标签体系
