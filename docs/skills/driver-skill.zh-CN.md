@@ -1,3 +1,17 @@
+---
+title: "Skill：PCIe & DMA 驱动重建"
+version: "1.1"
+last_modified: "2026-03-17"
+dependencies:
+  - "environment-skill.zh-CN.md"
+target_audience: "AI Agent / Project Replicator"
+maintenance_checklist_complete: false
+status: "usable"
+source_scope: "driver/"
+excludes:
+  - "examples/"
+---
+
 # Skill：PCIe & DMA 驱动重建
 
 ## 1. 目标

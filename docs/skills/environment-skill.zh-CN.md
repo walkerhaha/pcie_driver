@@ -1,3 +1,21 @@
+---
+title: "Skill：PCIe & DMA 构建与测试环境重建"
+version: "1.1"
+last_modified: "2026-03-17"
+dependencies: []
+target_audience: "AI Agent / Project Replicator"
+maintenance_checklist_complete: false
+status: "usable"
+source_scope:
+  - "README.md"
+  - "driver/Makefile"
+  - "test/CMakeLists.txt"
+  - "scripts/"
+  - "test/lib/mt_pcie_f.c"
+excludes:
+  - "examples/"
+---
+
 # Skill：PCIe & DMA 构建与测试环境重建
 
 ## 1. 目标
@@ -18,6 +36,8 @@
 - `scripts/install.sh`
 - `scripts/test_sanity.sh`
 - `test/lib/mt_pcie_f.c`
+
+说明：本文正文统一使用“build”描述构建动作；只有在引用仓库现有脚本文件时，才按真实文件名写作 `scripts/bulid.sh`。
 
 ---
 

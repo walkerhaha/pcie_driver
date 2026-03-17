@@ -17,6 +17,7 @@ Because CMA is not enalbed by default, here use reserved memory (EDK has 64G mem
 For AI-oriented, code-independent reconstruction of the PCIe & DMA driver, environment, and test suite, see:
 
 - `docs/skills/README.md`
+- `docs/skills/QUICK_START.zh-CN.md`
 - `docs/skills/driver-skill.zh-CN.md`
 - `docs/skills/environment-skill.zh-CN.md`
 - `docs/skills/test-suite-skill.zh-CN.md`

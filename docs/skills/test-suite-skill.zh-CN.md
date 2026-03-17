@@ -1,3 +1,18 @@
+---
+title: "Skill：PCIe & DMA 测试集重建"
+version: "1.1"
+last_modified: "2026-03-17"
+dependencies:
+  - "environment-skill.zh-CN.md"
+  - "driver-skill.zh-CN.md"
+target_audience: "AI Agent / Project Replicator"
+maintenance_checklist_complete: false
+status: "usable"
+source_scope: "test/"
+excludes:
+  - "examples/"
+---
+
 # Skill：PCIe & DMA 测试集重建
 
 ## 1. 目标
@@ -53,6 +68,8 @@
 ### 4.1 初始化与发现接口
 
 来源：`test/lib/mt_pcie_f.h`
+
+说明：`pcief_get_vf__num()` 中的双下划线来自当前仓库现有接口命名，skill 文档按源码现状保留，不在文档层擅自改名。
 
 ```c
 void pcief_init();
