@@ -550,19 +550,49 @@ long mt_test_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
 
 ### 6.3 `driver/mt-emu-mtdma-bare.c` — 裸机 DMA 传输
 
-**核心函数签名（AI 生成时保持此接口不变）：**
+**核心函数签名（来自 `mt-emu-mtdma-bare.h`，AI 生成时保持此接口不变）：**
 
 ```c
-/* 执行一次裸机 DMA 传输，返回 0 成功 */
-int dma_bare_xfer(struct dma_bare *bare,
-                  struct dma_bare_rw *rw_info);
+/* 初始化 DMA 公共寄存器（vf_num=0 表示 PF，非 0 表示 VF 数量） */
+void mtdma_comm_init(void __iomem *mtdma_comm_vaddr, int vf_num);
 
-/* DMA 完成中断处理 */
-irqreturn_t dma_bare_isr(int irq, void *dev_id);
+/* 为 PF 构建通道 info 结构（含寄存器映射、链表地址） */
+void build_dma_info(void *mtdma_vaddr, uint64_t mtdma_paddr,
+                    void __iomem *rg_vaddr, void __iomem *ll_vaddr,
+                    u8 vf, u8 wr_ch_cnt, u8 rd_ch_cnt,
+                    struct mtdma_info *dma_info);
 
-/* 初始化通道 */
-int dma_bare_ch_init(struct dma_bare *bare,
-                     struct mtdma_chan_info *info);
+/* 为 VF 构建通道 info 结构（devfn 为 VF 序号） */
+void build_dma_info_vf(void *mtdma_vaddr, uint64_t mtdma_paddr,
+                       void __iomem *rg_vaddr, void __iomem *ll_vaddr,
+                       struct mtdma_info *dma_info, int devfn);
+
+/* 初始化 PF 裸机 DMA 通道（分配 completion / mutex） */
+void mtdma_bare_init(struct dma_bare *dma_bare, struct mtdma_info *info);
+
+/* 初始化 VF 裸机 DMA 通道 */
+void mtdma_bare_init_vf(struct dma_bare *dma_bare,
+                        struct mtdma_info *info, int devfn);
+
+/* DMA 完成中断处理（由 MSI ISR 调用，complete(&bare_ch->int_done)） */
+int dma_bare_isr(struct dma_bare_ch *bare_ch);
+
+/* 执行一次裸机 DMA 传输，返回 0 成功
+ *   bare_ch       : 目标通道（wr_ch 或 rd_ch）
+ *   data_direction: DMA_MEM_TO_DEV / DMA_DEV_TO_MEM / DMA_DEV_TO_DEV / DMA_MEM_TO_MEM
+ *   desc_direction: DMA_DESC_IN_DEVICE(0) 或 DMA_DESC_IN_HOST(1)
+ *   desc_cnt      : N-1（链式）或 0（单描述符）
+ *   block_cnt     : 块数量，0=不使用块模式
+ *   sar           : 源地址
+ *   dar           : 目的地址
+ *   size          : 总传输字节数
+ *   ch_num        : 通道号 0-63
+ *   timeout_ms    : 超时毫秒数 */
+int dma_bare_xfer(struct dma_bare_ch *bare_ch,
+                  uint32_t data_direction, uint32_t desc_direction,
+                  uint32_t desc_cnt, uint32_t block_cnt,
+                  uint64_t sar, uint64_t dar,
+                  uint32_t size, uint32_t ch_num, uint32_t timeout_ms);
 ```
 
 **执行路径（用于调试）：**
@@ -578,6 +608,66 @@ int dma_bare_ch_init(struct dma_bare *bare,
                       ↑
                  MSI 中断 → dma_bare_isr()
                       └─ complete(&bare_ch->int_done)
+```
+
+### 6.4 `driver/mt-emu-ioctl.c` — 文件操作函数签名
+
+来源：`mt-emu-ioctl.h`，供 `file_operations` 结构体注册：
+
+```c
+int    mt_test_open   (struct inode *inode, struct file *file);
+ssize_t mt_test_read  (struct file *file, char __user *buf,
+                       size_t count, loff_t *ppos);
+ssize_t mt_test_write (struct file *file, const char __user *buf,
+                       size_t count, loff_t *ppos);
+int    mt_test_release(struct inode *inode, struct file *file);
+int    mt_test_mmap   (struct file *file, struct vm_area_struct *vma);
+long   mt_test_ioctl  (struct file *file, unsigned int cmd,
+                       unsigned long arg);
+```
+
+### 6.5 `driver/mt-emu-dmabuf.c` — 主机侧 DMA 缓冲区管理
+
+来源：`mt-emu-dmabuf.h`，由 GPU probe 调用：
+
+```c
+/* 探测并分配主机侧 DMA 缓冲区，创建 /dev/mt_emu_dmabuf 设备节点 */
+struct emu_dmabuf *emu_dmabuf_probe(struct pci_dev *pcid);
+
+/* 移除设备节点并释放缓冲区 */
+void emu_dmabuf_remove(struct pci_dev *pcid, struct emu_dmabuf *emu_dmabuf);
+```
+
+`emu_dmabuf` 结构体（定义于 `mt-emu.h`）：
+
+```c
+struct emu_dmabuf {
+    struct miscdevice miscdev;  /* /dev/mt_emu_dmabuf */
+    void             *mtdma_vaddr;  /* 主机侧缓冲区虚拟地址 */
+    u64               mtdma_paddr;  /* 主机侧缓冲区物理地址 */
+    u64               mtdma_size;   /* 缓冲区大小（受 DMA_RESV_MEM 影响）*/
+};
+/* DMA_RESV_MEM=1 时：mtdma_size = 0x800000000ULL（32 GB）
+ * DMA_RESV_MEM=0 时：mtdma_size = 4 MB（仿真 / 小内存） */
+```
+
+### 6.6 `driver/mt-emu-intr.c` — 中断初始化
+
+来源：`mt-emu-intr.h`：
+
+```c
+/* 初始化 PCIe 中断路由（MSI-X / MSI / Legacy） */
+void pcie_intr_init(struct emu_pcie *emu_pcie);
+```
+
+来源：`mt-emu.h`（中断管理接口）：
+
+```c
+/* 初始化中断（type: IRQ_LEGACY/IRQ_MSI/IRQ_MSIX；test_mode=1 启用测试模式） */
+int  irq_init(struct emu_pcie *emu_pcie, int type, int test_mode);
+
+/* 释放所有已申请的 IRQ */
+void qy_free_irq(struct emu_pcie *emu_pcie);
 ```
 
 ---
