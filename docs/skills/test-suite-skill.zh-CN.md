@@ -82,7 +82,11 @@ int pcief_get_vf__num();
 
 ```c
 int pcief_write(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void* data);
+int pcief_write_s(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void* data, uint32_t type);
 int pcief_read(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void* data);
+int pcief_read_s(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void* data, uint32_t type);
+int pcief_io_write(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void* data);
+int pcief_io_read(uint8_t fun, uint8_t bar, uint64_t offset, uint32_t len, void* data);
 int pcief_cfg_write(uint8_t fun, uint32_t offset, uint32_t len, void* data);
 int pcief_cfg_read(uint8_t fun, uint32_t offset, uint32_t len, void* data);
 int pcief_read_exp_rom(uint32_t len, void* data);
@@ -99,6 +103,14 @@ void pcief_sreg_u32(uint8_t fun, uint8_t bar, uint64_t address, uint32_t value);
 void pcief_sreg_u64(uint8_t fun, uint8_t bar, uint64_t address, uint64_t value);
 void pcief_sreg_u8(uint8_t fun, uint8_t bar, uint64_t address, uint8_t value);
 void pcief_sreg_u16(uint8_t fun, uint8_t bar, uint64_t address, uint16_t value);
+uint32_t pcief_io_greg_u32(uint8_t fun, uint8_t bar, uint64_t address);
+uint64_t pcief_io_greg_u64(uint8_t fun, uint8_t bar, uint64_t address);
+uint8_t  pcief_io_greg_u8(uint8_t fun, uint8_t bar, uint64_t address);
+uint16_t pcief_io_greg_u16(uint8_t fun, uint8_t bar, uint64_t address);
+void pcief_io_sreg_u32(uint8_t fun, uint8_t bar, uint64_t address, uint32_t value);
+void pcief_io_sreg_u64(uint8_t fun, uint8_t bar, uint64_t address, uint64_t value);
+void pcief_io_sreg_u8(uint8_t fun, uint8_t bar, uint64_t address, uint8_t value);
+void pcief_io_sreg_u16(uint8_t fun, uint8_t bar, uint64_t address, uint16_t value);
 ```
 
 ### 4.3 DMA 缓冲区接口
@@ -120,6 +132,17 @@ int pcief_irq_init(uint8_t fun, uint8_t type, uint8_t test_mode);
 int pcief_dmaisr_set(uint8_t fun, uint8_t dmabare);
 ```
 
+这组接口主要服务于两类测试：
+
+1. **本地 PCIe 中断链路验证**
+   - `pcief_irq_init()`
+   - `pcief_wait_int()`
+   - `pcief_trig_int()`
+2. **Target/SMC/FEC/DSP 命令交互**
+   - `pcief_tgt_cmd()`
+
+未来项目如果只想保留 DMA 测试，不一定要原样保留所有 target 命令，但**中断初始化/等待/触发这一组同步原语必须有等价物**。
+
 ### 4.5 bare DMA 接口
 
 ```c
@@ -136,11 +159,61 @@ void  pcief_mtdma_engine_free(void *ptr);
 int   pcief_mtdma_engine_start(int fun, struct mtdma_rw *info, void* rw_buf, uint32_t* done);
 ```
 
-### 4.7 地址辅助接口
+### 4.7 Target / SMC / FEC / DSP 远程命令接口
+
+来源：`test/lib/mt_pcie_f.h`、`test/lib/mt_pcie_f.c`
+
+```c
+int pcief_tgt_sreg_u32(uint8_t target, uint64_t address, uint32_t val);
+int pcief_tgt_post_sreg_u32(uint8_t target, uint64_t address, uint32_t val);
+int pcief_tgt_greg_u32(uint8_t target, uint64_t address, uint32_t* val);
+int pcief_tgt_wr(uint8_t target, uint64_t address, void* data, uint32_t size);
+int pcief_tgt_rd(uint8_t target, uint64_t address, void* data, uint32_t size);
+int pcief_tgt_wr_rand(uint8_t target, uint64_t address, uint32_t size);
+int pcief_tgt_crc(uint8_t target, uint64_t address, uint32_t size, uint32_t* val);
+int pcief_tgt_dma(uint8_t target, uint8_t idx, uint8_t ch, uint64_t src, uint64_t dst, uint32_t size);
+int pcief_tgt_cache(uint8_t target, uint32_t op, uint64_t start, uint64_t size);
+int pcief_tgt_mtdma_reset(uint8_t target);
+```
+
+这些接口通过 GPU 侧命令/响应槽与目标端交互，覆盖：
+
+- 远端 32-bit 寄存器读写
+- 远端内存块读写
+- 远端随机写与 CRC 校验
+- 远端 DMA 与 cache 维护
+- 远端 MTDMA reset
+
+固定目标枚举来源同一头文件：
+
+```c
+#define PCIEF_TGT_DSP 0
+#define PCIEF_TGT_FEC 1
+#define PCIEF_TGT_SMC 2
+```
+
+如果未来项目不再保留这些具体 target 名称，也至少应保留“**主机通过统一消息槽向远端发命令并等待完成**”这一抽象契约。
+
+### 4.8 电源管理与寄存器模式接口
+
+```c
+int pcief_get_power(uint8_t fun, uint32_t* state);
+int pcief_suspend(uint8_t fun, uint32_t state);
+int pcief_resume(uint8_t fun);
+int pcief_reg_mode(uint8_t bypass_secure);
+```
+
+这组接口在 `test/shell/main.c` 中被 shell 命令直接消费，说明它们不仅是测试 helper，也承担“人工调试入口”的职责。
+
+### 4.9 地址辅助与性能接口
 
 ```c
 uint64_t pcief_vf_base_addr(int vf);
 int pcief_mtdma_pf_ch_num();
+void pcief_get_mtdma_info(uint64_t *pa, uint64_t *ma, uint64_t *size);
+void pcief_perf_mstr_en(int en);
+void pcief_perf_slv_en(int en);
+void pcief_perf_dma_en(int en);
 long time_get_ms();
 unsigned int make_crc(unsigned int crc, unsigned char *string, unsigned int size);
 ```

@@ -21,3 +21,5 @@ For AI-oriented, code-independent reconstruction of the PCIe & DMA driver, envir
 - `docs/skills/driver-skill.zh-CN.md`
 - `docs/skills/environment-skill.zh-CN.md`
 - `docs/skills/test-suite-skill.zh-CN.md`
+- `docs/skills/troubleshooting-skill.zh-CN.md`
+- `docs/skills/source-to-skill.mapping.zh-CN.md`

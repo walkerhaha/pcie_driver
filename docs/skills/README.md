@@ -25,6 +25,10 @@ scope: "driver,test,scripts without examples"
    - 定义测试入口、标签体系、关键测试 API、线程化参数、测试集组织与扩展方式。
 4. [`QUICK_START.zh-CN.md`](./QUICK_START.zh-CN.md)
    - 给出只依赖这些 skills 文档即可重建驱动、环境、测试集的固定消费顺序。
+5. [`troubleshooting-skill.zh-CN.md`](./troubleshooting-skill.zh-CN.md)
+   - 把构建、加载、设备发现、DMA/target 运行时问题整理为集中排障入口。
+6. [`source-to-skill.mapping.zh-CN.md`](./source-to-skill.mapping.zh-CN.md)
+   - 提供源码文件 / API / 数据结构到各份 skill 章节的快速跳转索引。
 
 ## 内部导航与继承顺序
 
@@ -51,6 +55,37 @@ scope: "driver,test,scripts without examples"
 8. 参数化测试集组织：[`test-suite-skill.zh-CN.md`](./test-suite-skill.zh-CN.md) §5 ~ §11
 9. 最后按 [`QUICK_START.zh-CN.md`](./QUICK_START.zh-CN.md) 的固定步骤落地
 
+## 场景化导读路径
+
+### 场景 1：先搭环境并跑冒烟测试
+
+1. [`environment-skill.zh-CN.md`](./environment-skill.zh-CN.md) §3 ~ §5
+2. [`test-suite-skill.zh-CN.md`](./test-suite-skill.zh-CN.md) §3 ~ §4.5
+3. [`QUICK_START.zh-CN.md`](./QUICK_START.zh-CN.md) §2 ~ §5
+
+### 场景 2：只关心 bare DMA / 中断链路
+
+1. [`driver-skill.zh-CN.md`](./driver-skill.zh-CN.md) §9 ~ §10
+2. [`test-suite-skill.zh-CN.md`](./test-suite-skill.zh-CN.md) §4.4 ~ §4.5、§6 ~ §7
+3. 出问题时跳到 [`troubleshooting-skill.zh-CN.md`](./troubleshooting-skill.zh-CN.md) §6
+
+### 场景 3：只关心 target / SMC / DSP 命令链路
+
+1. [`test-suite-skill.zh-CN.md`](./test-suite-skill.zh-CN.md) §4.4、§4.7、§4.8
+2. [`source-to-skill.mapping.zh-CN.md`](./source-to-skill.mapping.zh-CN.md) §3 ~ §5
+3. 出问题时跳到 [`troubleshooting-skill.zh-CN.md`](./troubleshooting-skill.zh-CN.md) §6.2 ~ §6.3
+
+### 场景 4：只想定位源码该看哪份文档
+
+1. 先读 [`source-to-skill.mapping.zh-CN.md`](./source-to-skill.mapping.zh-CN.md)
+2. 再回到对应主 skill
+
+### 场景 5：新环境编译失败，先做兼容性排查
+
+1. [`environment-skill.zh-CN.md`](./environment-skill.zh-CN.md) §8
+2. [`test-suite-skill.zh-CN.md`](./test-suite-skill.zh-CN.md) §12
+3. [`troubleshooting-skill.zh-CN.md`](./troubleshooting-skill.zh-CN.md) §3 ~ §4
+
 ### 痛点快查表
 
 | 要解决的问题 | 优先查阅 |
@@ -63,6 +98,8 @@ scope: "driver,test,scripts without examples"
 | 测试侧有哪些 API 可以当契约 | `test-suite-skill.zh-CN.md` §4 |
 | DMA 测试如何参数化 | `test-suite-skill.zh-CN.md` §5 ~ §7 |
 | 测试标签怎么分层组织 | `test-suite-skill.zh-CN.md` §8 ~ §9 |
+| 源码文件对应哪份 skill | `source-to-skill.mapping.zh-CN.md` |
+| 编译/加载/运行失败先怎么排 | `troubleshooting-skill.zh-CN.md` |
 
 ## 继承边界
 
