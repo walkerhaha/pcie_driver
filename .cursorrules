@@ -1,12 +1,12 @@
-# Cursor Rules — MT EMU PCIe DMA Driver Test Generation
+# Cursor 规则 — MT EMU PCIe DMA 驱动测试生成
 
-You are working on the **MT EMU PCIe DMA Driver** test suite.
-This is a Linux kernel + user-space Catch2 test suite for a Synopsys DesignWare-based
-PCIe DMA controller (MT/Mthreads GPU/APU devices, vendor 0x1ed5).
+你正在为 **MT EMU PCIe DMA 驱动**编写测试用例。
+这是一套 Linux 内核 + 用户态 Catch2 测试框架，面向基于 Synopsys DesignWare 的 PCIe DMA 控制器（摩尔线程 GPU/APU 设备，厂商 ID `0x1ed5`）。
 
-## Language & Framework
-- Tests are **C++11** using **Catch2** (header-only, in `test/src/catch2/`)
-- Every test file must include:
+## 语言与框架
+
+- 测试使用 **C++11**，基于 **Catch2**（单头文件，位于 `test/src/catch2/`）
+- 每个测试文件必须包含：
   ```cpp
   #include "catch2/catch.hpp"
   #include "simlog.h"
@@ -14,56 +14,61 @@ PCIe DMA controller (MT/Mthreads GPU/APU devices, vendor 0x1ed5).
   #include "mt_pcie_f.h"
   #include "test_thr.h"
   ```
-- Build: `cd test && mkdir -p build && cd build && cmake .. && make`
-- Run: `./test -t "[tagname]"`
+- 编译：`cd test && mkdir -p build && cd build && cmake .. && make`
+- 运行：`./test -t "[标签名]"`
 
-## Device Function Constants (mt_pcie_f.h)
+## 设备功能号常量（mt_pcie_f.h）
+
 ```c
-F_GPU  = 0   // PF0 GPU
-F_APU  = 1   // PF1 APU
-F_VGUP(i)    // VF i (0..VF_NUM-1)
-F_MTDMA      // DMA buffer device
+F_GPU   = 0   // PF0 GPU
+F_APU   = 1   // PF1 APU
+F_VGUP(i)     // 第 i 个 VF（0..VF_NUM-1）
+F_MTDMA       // DMA 缓冲区设备
 ```
 
-## Primary DMA API
+## 核心 DMA API
+
 ```c
-// Core transfer — returns 0 on success
+// 执行一次 DMA 传输，返回 0 表示成功
 int pcief_dma_bare_xfer(
     uint32_t data_direction,  // DMA_MEM_TO_DEV / DMA_DEV_TO_MEM / DMA_DEV_TO_DEV / DMA_MEM_TO_MEM
-    uint32_t desc_direction,  // DMA_DESC_IN_DEVICE (0) or DMA_DESC_IN_HOST (1)
-    uint32_t desc_cnt,        // N-1 for N descriptors; 0 = single descriptor
-    uint32_t block_cnt,       // 0 = no block mode
-    uint32_t ch_num,          // channel 0-63
-    uint64_t sar,             // source address
-    uint64_t dar,             // destination address
-    uint32_t size,            // bytes
-    uint32_t timeout_ms       // use cal_timeout(size)
+    uint32_t desc_direction,  // DMA_DESC_IN_DEVICE(0) 或 DMA_DESC_IN_HOST(1)
+    uint32_t desc_cnt,        // N 个描述符时填 N-1；单描述符填 0
+    uint32_t block_cnt,       // 0 = 不使用块模式
+    uint32_t ch_num,          // 通道号 0-63
+    uint64_t sar,             // 源地址
+    uint64_t dar,             // 目的地址
+    uint32_t size,            // 传输字节数
+    uint32_t timeout_ms       // 超时，推荐用 cal_timeout(size)
 );
 
-// BAR access
+// BAR 寄存器访问
 uint32_t pcief_greg_u32(uint8_t fun, uint8_t bar, uint64_t address);
 void     pcief_sreg_u32(uint8_t fun, uint8_t bar, uint64_t address, uint32_t value);
 
-// Host DMA buffer
-long pcief_dmabuf_malloc(uint64_t len);   // returns physical addr
+// 主机 DMA 缓冲区
+long pcief_dmabuf_malloc(uint64_t len);   // 返回物理地址
 void pcief_dmabuf_free(long addr);
 ```
 
-## Transfer Modes
-| Mode | desc_cnt | block_cnt |
-|------|----------|-----------|
-| Single descriptor | 0 | 0 |
-| Chain (N descs) | N-1 | 0 |
-| Block (B blocks of D descs) | D-1 | B |
+## 三种传输模式
 
-## Direction Bitmask for Multi-Direction Tests
+| 模式 | desc_cnt | block_cnt |
+|------|----------|-----------|
+| 单描述符 | 0 | 0 |
+| 链式（N 个描述符） | N-1 | 0 |
+| 块模式（B 块，每块 D 个描述符） | D-1 | B |
+
+## 多方向测试的位掩码写法
+
 ```cpp
 uint32_t dirs = BIT(DMA_MEM_TO_DEV) | BIT(DMA_DEV_TO_MEM) | BIT(DMA_DEV_TO_DEV);
 ```
 
-## Test Helper
+## 辅助函数
+
 ```cpp
-// Spawns ch_cnt threads, runs transfer, asserts 0 return
+// 为每个通道创建独立线程执行传输，自动断言结果
 void dma_bare_simple_test(
     uint32_t ch_start_num, uint32_t ch_cnt,
     uint32_t data_direction_bits, uint32_t desc_direction,
@@ -72,68 +77,75 @@ void dma_bare_simple_test(
     uint64_t size, int cnt, int offset
 );
 
-// Timeout helper (2 MB/s baseline)
+// 超时计算（基准速度 2 MB/s）
 static int cal_timeout(uint64_t size);
 ```
 
-## Test Tag Conventions
-- `[mtdma0]` — sanity/smoke (single descriptor)
-- `[mtdma1]` — functional (chain, block, sizes, DDR)
-- `[mtdma_mmu]` — MMU + DMA
-- `[base]` — BAR/ROM access
-- `[intr0]` / `[intr1]` — interrupt tests
+## 测试标签规范
 
-## Typical Test Case Structure
+- `[mtdma0]` — 冒烟测试（单描述符）
+- `[mtdma1]` — 功能测试（链式、块模式、DDR）
+- `[mtdma_mmu]` — MMU+DMA
+- `[base]` — BAR/ROM 访问
+- `[intr0]` / `[intr1]` — 中断测试
+- `[sanity]` — 健全性测试
+- `[stress]` — 压力测试
+- `[perf]` — 性能测试
+
+## 典型测试用例结构
+
 ```cpp
-TEST_CASE("descriptive_test_name", "[tag]") {
-    LInfo("TEST_CASE descriptive_test_name start\n");
+TEST_CASE("描述性测试名称", "[标签]") {
+    LInfo("TEST_CASE 描述性测试名称 start\n");
 
-    // set up parameters
     uint32_t ch_num              = 0;
     uint32_t ch_cnt              = 1;
     uint32_t data_direction_bits = BIT(DMA_MEM_TO_DEV) | BIT(DMA_DEV_TO_MEM);
     uint32_t desc_direction      = DMA_DESC_IN_DEVICE;
-    uint32_t desc_cnt            = 0;
+    uint32_t desc_cnt            = 0;   // 单描述符
     uint32_t block_cnt           = 0;
     uint64_t device_sar          = 0x0;
     uint64_t device_dar          = 0x0;
-    uint64_t size                = 512 * 1024;
+    uint64_t size                = 512 * 1024;  // 512 KB
     int      cnt                 = 1;
 
     dma_bare_simple_test(ch_num, ch_cnt, data_direction_bits,
                          desc_direction, desc_cnt, block_cnt,
                          device_sar, device_dar, size, cnt, 0);
 
-    LInfo("TEST_CASE descriptive_test_name done\n");
+    LInfo("TEST_CASE 描述性测试名称 done\n");
 }
 ```
 
-## Device DDR Address Constants (mt-emu-drv.h)
+## 设备 DDR 地址常量（mt-emu-drv.h）
+
 ```c
-LADDR_MTDMA_TEST   = 0x100000         // general test region
-LADDR_APU          = DDR_SZ_FREE      // APU DDR
-LADDR_MTDMA_LL_WR  // DMA write-channel link-list region
-LADDR_MTDMA_LL_RD  // DMA read-channel link-list region
-LADDR_VGPU(vf)     // per-VF 1 GB DDR window
+LADDR_MTDMA_TEST  = 0x100000      // 通用测试区（新测试默认使用此地址）
+LADDR_APU         = DDR_SZ_FREE   // APU DDR
+LADDR_MTDMA_LL_WR                 // DMA 写通道链表区
+LADDR_MTDMA_LL_RD                 // DMA 读通道链表区
+LADDR_VGPU(vf)                    // 每个 VF 的 1 GB DDR 窗口
 ```
 
-## Interrupt Bits (mt-emu-mtdma-bare.h)
+## 中断位（mt-emu-mtdma-bare.h）
+
 ```c
-DMA_CH_INTR_BIT_DONE           = BIT(0)  // success
-DMA_CH_INTR_BIT_ERR_DATA       = BIT(1)  // data error
-DMA_CH_INTR_BIT_ERR_DESC_READ  = BIT(2)  // descriptor read error
-DMA_CH_INTR_BIT_ERR_CFG        = BIT(3)  // config error
-DMA_CH_INTR_BIT_ERR_DUMMY_READ = BIT(4)  // address validation failure
+DMA_CH_INTR_BIT_DONE           = BIT(0)  // 传输成功
+DMA_CH_INTR_BIT_ERR_DATA       = BIT(1)  // 数据错误
+DMA_CH_INTR_BIT_ERR_DESC_READ  = BIT(2)  // 描述符读取错误
+DMA_CH_INTR_BIT_ERR_CFG        = BIT(3)  // 配置错误
+DMA_CH_INTR_BIT_ERR_DUMMY_READ = BIT(4)  // 地址合法性检查失败
 ```
 
-## Key Rules
-1. `desc_cnt` is always **N−1** (N = total descriptors).
-2. `block_cnt = 0` means no block mode.
-3. Use `cal_timeout(size)` for timeout; multiply by `block_cnt` for block mode.
-4. Use `REQUIRE()` for fatal assertions; never suppress errors silently.
-5. Log with `LInfo()` / `LError()`, not bare `printf` (though printf also works).
-6. `pcief_init()` is called globally — do **not** call it inside individual test cases.
-7. For multi-channel tests, `dma_bare_simple_test` automatically offsets device addresses by `size` per channel.
-8. For all-direction tests use the bitmask: `BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV)|BIT(DMA_MEM_TO_MEM)`.
-9. New test `.cc` files in `test/src/` are automatically picked up by CMake (`file(GLOB TEST_SOURCES src/*.cc)`).
-10. Existing test files are `base.cc`, `mthdma.cc`, `intr.cc`, `stress.cc` — add new tests in the appropriate file or create a new file.
+## 关键规则
+
+1. `desc_cnt` 始终是 **N−1**（N = 描述符总数）。
+2. `block_cnt = 0` 表示不使用块模式。
+3. 超时使用 `cal_timeout(size)`；块模式超时再乘以 `block_cnt`。
+4. 使用 `REQUIRE()` 做致命断言，禁止静默忽略错误。
+5. 日志使用 `LInfo()` / `LError()`，不要用裸 `printf`（尽管也能工作）。
+6. `pcief_init()` 已在全局调用 — **不要**在测试用例内部再次调用。
+7. 多通道测试中，`dma_bare_simple_test` 会自动为每个通道递增设备地址（各增加 `size`）。
+8. 全方向测试位掩码：`BIT(DMA_MEM_TO_DEV)|BIT(DMA_DEV_TO_MEM)|BIT(DMA_DEV_TO_DEV)|BIT(DMA_MEM_TO_MEM)`。
+9. 在 `test/src/` 中新建的 `.cc` 文件会被 CMake 自动包含。
+10. 现有测试文件：`base.cc`、`mthdma.cc`、`intr.cc`、`stress.cc` — 将新测试加入合适的文件或新建文件。
