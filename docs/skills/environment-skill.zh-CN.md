@@ -14,7 +14,7 @@
 - `README.md`
 - `driver/Makefile`
 - `test/CMakeLists.txt`
-- `scripts/bulid.sh`
+- `scripts/bulid.sh`（仓库当前文件名如此，后续新项目可规范命名为 `build.sh`）
 - `scripts/install.sh`
 - `scripts/test_sanity.sh`
 - `test/lib/mt_pcie_f.c`
@@ -25,7 +25,7 @@
 
 ### 2.1 构建依赖
 
-来源：`scripts/bulid.sh`
+来源：`scripts/bulid.sh`（现名）
 
 - `build-essential`
 - `cmake`
