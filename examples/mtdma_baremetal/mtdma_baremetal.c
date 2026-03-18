@@ -14,6 +14,7 @@
  *
  * 不复用原始驱动的任何 .c/.h 文件，所有定义均在 mtdma_baremetal.h 中自包含。
  *
+ * 移植配置：统一在 mtdma_baremetal_config.h 中调整
  * 编译：见同目录 Makefile
  * 加载：insmod mtdma_baremetal.ko
  * 卸载：rmmod mtdma_baremetal
@@ -31,16 +32,11 @@ MODULE_AUTHOR("MT EMU Example");
 MODULE_DESCRIPTION("Minimal bare-metal MTDMA PCIe DMA example (polling mode)");
 MODULE_LICENSE("GPL v2");
 
-/* 每次传输大小：64 KB */
-#define XFER_SIZE  (64 * 1024)
-
 /*
  * 设备 DDR 数据区基址（BAR2 数据区：0x010000000000-0x01006fffffff）。
- * 每条通道对占 XFER_SIZE * MTDMA_BLOCK_CNT 字节，通道 i 的起始地址为：
- *   DEVICE_DATA_BASE + i * DEVICE_DATA_CH_SIZE
+ * 每条通道对占 MTDMA_XFER_SIZE * MTDMA_BLOCK_CNT 字节，通道 i 的起始地址为：
+ *   MTDMA_DEVICE_DATA_BASE + i * MTDMA_DEVICE_DATA_CH_SIZE
  */
-#define DEVICE_DATA_BASE     0x010000100000ULL
-#define DEVICE_DATA_CH_SIZE  ((u64)XFER_SIZE * MTDMA_BLOCK_CNT)
 
 /* =========================================================
  * § 1. 公共寄存器初始化
@@ -271,9 +267,6 @@ static void mtdma_submit_chain(struct mtdma_chan *ch,
  *       CH_INTR_RAW[0]（done 位），同时 REG_CH_INTR_IMSK 保持 0
  *       （不屏蔽通道内部中断状态），只是不向上传递 MSI。
  * ========================================================= */
-#define MTDMA_POLL_INTERVAL_US   500            /* 每次轮询间隔 500 µs */
-#define MTDMA_POLL_TIMEOUT_MS    5000U          /* 超时 5 秒 */
-
 static int mtdma_poll_done(struct mtdma_chan *ch)
 {
 	ktime_t deadline = ktime_add_ms(ktime_get(), MTDMA_POLL_TIMEOUT_MS);
@@ -333,7 +326,7 @@ static inline void __iomem *ch_ll_vaddr(struct mtdma_dev *mdev,
  */
 static inline u64 ch_ll_ddr(int ch_idx, int is_wr)
 {
-	return 0x010000000000ULL + MTDMA_DESC_LIST_BASE
+	return MTDMA_BAR2_DEVICE_BASE + MTDMA_DESC_LIST_BASE
 	       + (u64)(2 * ch_idx + is_wr) * MTDMA_LL_CH_STRIDE;
 }
 
@@ -342,9 +335,9 @@ static inline u64 ch_ll_ddr(int ch_idx, int is_wr)
  */
 static inline u64 ch_dev_addr(int ch_idx, int block_idx)
 {
-	return DEVICE_DATA_BASE
-	       + (u64)ch_idx  * DEVICE_DATA_CH_SIZE
-	       + (u64)block_idx * XFER_SIZE;
+	return MTDMA_DEVICE_DATA_BASE
+	       + (u64)ch_idx  * MTDMA_DEVICE_DATA_CH_SIZE
+	       + (u64)block_idx * MTDMA_XFER_SIZE;
 }
 
 /* =========================================================
@@ -376,26 +369,26 @@ static int test_single_1ch(struct mtdma_dev *mdev)
 	int i, ret = 0;
 
 	dev_info(&mdev->pdev->dev,
-		 "Test 1: single task in single chain (size=%u)\n", XFER_SIZE);
+		 "Test 1: single task in single chain (size=%u)\n", MTDMA_XFER_SIZE);
 
-	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 				     &h2d_bus, GFP_KERNEL);
 	if (!h2d_buf)
 		return -ENOMEM;
-	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 				     &d2h_bus, GFP_KERNEL);
 	if (!d2h_buf) {
 		ret = -ENOMEM;
 		goto free_h2d;
 	}
 
-	for (i = 0; i < XFER_SIZE / 4; i++)
+	for (i = 0; i < MTDMA_XFER_SIZE / 4; i++)
 		((u32 *)h2d_buf)[i] = 0x11110000 + i;
-	memset(d2h_buf, 0, XFER_SIZE);
+	memset(d2h_buf, 0, MTDMA_XFER_SIZE);
 
 	mutex_lock(&mdev->rd_ch[0].lock);
 	mtdma_submit_single(&mdev->rd_ch[0],
-			    (u64)h2d_bus, dev_addr, XFER_SIZE, 0);
+			    (u64)h2d_bus, dev_addr, MTDMA_XFER_SIZE, 0);
 	ret = mtdma_poll_done(&mdev->rd_ch[0]);
 	mutex_unlock(&mdev->rd_ch[0].lock);
 	if (ret) {
@@ -405,7 +398,7 @@ static int test_single_1ch(struct mtdma_dev *mdev)
 
 	mutex_lock(&mdev->wr_ch[0].lock);
 	mtdma_submit_single(&mdev->wr_ch[0],
-			    dev_addr, (u64)d2h_bus, XFER_SIZE, CH_EN_DUMMY);
+			    dev_addr, (u64)d2h_bus, MTDMA_XFER_SIZE, CH_EN_DUMMY);
 	ret = mtdma_poll_done(&mdev->wr_ch[0]);
 	mutex_unlock(&mdev->wr_ch[0].lock);
 	if (ret) {
@@ -413,13 +406,13 @@ static int test_single_1ch(struct mtdma_dev *mdev)
 		goto free_d2h;
 	}
 
-	ret = memcmp(h2d_buf, d2h_buf, XFER_SIZE) ? -EBADMSG : 0;
+	ret = memcmp(h2d_buf, d2h_buf, MTDMA_XFER_SIZE) ? -EBADMSG : 0;
 	dev_info(&mdev->pdev->dev, "Test 1 %s\n", ret ? "FAILED" : "PASSED");
 
 free_d2h:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, d2h_buf, d2h_bus);
+	dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE, d2h_buf, d2h_bus);
 free_h2d:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, h2d_buf, h2d_bus);
+	dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE, h2d_buf, h2d_bus);
 	return ret;
 }
 
@@ -438,26 +431,26 @@ static int test_chain_1ch(struct mtdma_dev *mdev)
 
 	dev_info(&mdev->pdev->dev,
 		 "Test 2: chain mode in single chain (%u descs, size=%u)\n",
-		 MTDMA_CHAIN_DESC_NUM, XFER_SIZE);
+		 MTDMA_CHAIN_DESC_NUM, MTDMA_XFER_SIZE);
 
-	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 				     &h2d_bus, GFP_KERNEL);
 	if (!h2d_buf)
 		return -ENOMEM;
-	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 				     &d2h_bus, GFP_KERNEL);
 	if (!d2h_buf) {
 		ret = -ENOMEM;
 		goto free_h2d;
 	}
 
-	for (i = 0; i < XFER_SIZE / 4; i++)
+	for (i = 0; i < MTDMA_XFER_SIZE / 4; i++)
 		((u32 *)h2d_buf)[i] = 0x22220000 + i;
-	memset(d2h_buf, 0, XFER_SIZE);
+	memset(d2h_buf, 0, MTDMA_XFER_SIZE);
 
 	mutex_lock(&mdev->rd_ch[0].lock);
 	mtdma_submit_chain(&mdev->rd_ch[0], rd_ll, rd_ddr,
-			   (u64)h2d_bus, dev_addr, XFER_SIZE, extra, 0);
+			   (u64)h2d_bus, dev_addr, MTDMA_XFER_SIZE, extra, 0);
 	ret = mtdma_poll_done(&mdev->rd_ch[0]);
 	mutex_unlock(&mdev->rd_ch[0].lock);
 	if (ret) {
@@ -467,7 +460,7 @@ static int test_chain_1ch(struct mtdma_dev *mdev)
 
 	mutex_lock(&mdev->wr_ch[0].lock);
 	mtdma_submit_chain(&mdev->wr_ch[0], wr_ll, wr_ddr,
-			   dev_addr, (u64)d2h_bus, XFER_SIZE, extra,
+			   dev_addr, (u64)d2h_bus, MTDMA_XFER_SIZE, extra,
 			   CH_EN_DUMMY);
 	ret = mtdma_poll_done(&mdev->wr_ch[0]);
 	mutex_unlock(&mdev->wr_ch[0].lock);
@@ -476,13 +469,13 @@ static int test_chain_1ch(struct mtdma_dev *mdev)
 		goto free_d2h;
 	}
 
-	ret = memcmp(h2d_buf, d2h_buf, XFER_SIZE) ? -EBADMSG : 0;
+	ret = memcmp(h2d_buf, d2h_buf, MTDMA_XFER_SIZE) ? -EBADMSG : 0;
 	dev_info(&mdev->pdev->dev, "Test 2 %s\n", ret ? "FAILED" : "PASSED");
 
 free_d2h:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, d2h_buf, d2h_bus);
+	dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE, d2h_buf, d2h_bus);
 free_h2d:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, h2d_buf, h2d_bus);
+	dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE, h2d_buf, h2d_bus);
 	return ret;
 }
 
@@ -490,7 +483,7 @@ free_h2d:
 static int test_block_1ch(struct mtdma_dev *mdev)
 {
 	const u32 extra    = MTDMA_CHAIN_DESC_NUM - 1;
-	const u32 total    = XFER_SIZE * MTDMA_BLOCK_CNT;
+	const u32 total    = MTDMA_XFER_SIZE * MTDMA_BLOCK_CNT;
 	void __iomem *rd_ll = ch_ll_vaddr(mdev, 0, 0);
 	void __iomem *wr_ll = ch_ll_vaddr(mdev, 0, 1);
 	u64 rd_ddr = ch_ll_ddr(0, 0);
@@ -501,7 +494,7 @@ static int test_block_1ch(struct mtdma_dev *mdev)
 
 	dev_info(&mdev->pdev->dev,
 		 "Test 3: chain block mode in single chain (%u blocks x %u descs, size=%u/block)\n",
-		 MTDMA_BLOCK_CNT, MTDMA_CHAIN_DESC_NUM, XFER_SIZE);
+		 MTDMA_BLOCK_CNT, MTDMA_CHAIN_DESC_NUM, MTDMA_XFER_SIZE);
 
 	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, total, &h2d_bus,
 				     GFP_KERNEL);
@@ -520,12 +513,12 @@ static int test_block_1ch(struct mtdma_dev *mdev)
 
 	for (j = 0; j < MTDMA_BLOCK_CNT; j++) {
 		u64 dev_addr = ch_dev_addr(0, j);
-		dma_addr_t h2d_blk = h2d_bus + (dma_addr_t)j * XFER_SIZE;
-		dma_addr_t d2h_blk = d2h_bus + (dma_addr_t)j * XFER_SIZE;
+		dma_addr_t h2d_blk = h2d_bus + (dma_addr_t)j * MTDMA_XFER_SIZE;
+		dma_addr_t d2h_blk = d2h_bus + (dma_addr_t)j * MTDMA_XFER_SIZE;
 
 		mutex_lock(&mdev->rd_ch[0].lock);
 		mtdma_submit_chain(&mdev->rd_ch[0], rd_ll, rd_ddr,
-				   (u64)h2d_blk, dev_addr, XFER_SIZE, extra,
+				   (u64)h2d_blk, dev_addr, MTDMA_XFER_SIZE, extra,
 				   0);
 		ret = mtdma_poll_done(&mdev->rd_ch[0]);
 		mutex_unlock(&mdev->rd_ch[0].lock);
@@ -537,7 +530,7 @@ static int test_block_1ch(struct mtdma_dev *mdev)
 
 		mutex_lock(&mdev->wr_ch[0].lock);
 		mtdma_submit_chain(&mdev->wr_ch[0], wr_ll, wr_ddr,
-				   dev_addr, (u64)d2h_blk, XFER_SIZE, extra,
+				   dev_addr, (u64)d2h_blk, MTDMA_XFER_SIZE, extra,
 				   CH_EN_DUMMY);
 		ret = mtdma_poll_done(&mdev->wr_ch[0]);
 		mutex_unlock(&mdev->wr_ch[0].lock);
@@ -570,28 +563,28 @@ static int test_single_2ch(struct mtdma_dev *mdev)
 
 	dev_info(&mdev->pdev->dev,
 		 "Test 4: single task in multi chain (%d channels, size=%u)\n",
-		 MTDMA_NUM_TEST_CH, XFER_SIZE);
+		 MTDMA_NUM_TEST_CH, MTDMA_XFER_SIZE);
 
 	/* Allocate buffers for all channels */
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
-		h2d_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+		h2d_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 						 &h2d_bus[ch], GFP_KERNEL);
 		if (!h2d_buf[ch]) {
 			ret = -ENOMEM;
 			goto free_ch;
 		}
-		d2h_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+		d2h_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 						 &d2h_bus[ch], GFP_KERNEL);
 		if (!d2h_buf[ch]) {
 			ret = -ENOMEM;
-			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+			dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 					  h2d_buf[ch], h2d_bus[ch]);
 			h2d_buf[ch] = NULL;
 			goto free_ch;
 		}
-		for (i = 0; i < XFER_SIZE / 4; i++)
+		for (i = 0; i < MTDMA_XFER_SIZE / 4; i++)
 			((u32 *)h2d_buf[ch])[i] = 0x44440000 + ch * 0x10000 + i;
-		memset(d2h_buf[ch], 0, XFER_SIZE);
+		memset(d2h_buf[ch], 0, MTDMA_XFER_SIZE);
 	}
 
 	/* Submit H2D for all channels, then poll all */
@@ -599,7 +592,7 @@ static int test_single_2ch(struct mtdma_dev *mdev)
 		mutex_lock(&mdev->rd_ch[ch].lock);
 		mtdma_submit_single(&mdev->rd_ch[ch],
 				    (u64)h2d_bus[ch], ch_dev_addr(ch, 0),
-				    XFER_SIZE, 0);
+				    MTDMA_XFER_SIZE, 0);
 	}
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
 		int r = mtdma_poll_done(&mdev->rd_ch[ch]);
@@ -619,7 +612,7 @@ static int test_single_2ch(struct mtdma_dev *mdev)
 		mutex_lock(&mdev->wr_ch[ch].lock);
 		mtdma_submit_single(&mdev->wr_ch[ch],
 				    ch_dev_addr(ch, 0), (u64)d2h_bus[ch],
-				    XFER_SIZE, CH_EN_DUMMY);
+				    MTDMA_XFER_SIZE, CH_EN_DUMMY);
 	}
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
 		int r = mtdma_poll_done(&mdev->wr_ch[ch]);
@@ -635,7 +628,7 @@ static int test_single_2ch(struct mtdma_dev *mdev)
 		goto free_ch;
 
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
-		if (memcmp(h2d_buf[ch], d2h_buf[ch], XFER_SIZE)) {
+		if (memcmp(h2d_buf[ch], d2h_buf[ch], MTDMA_XFER_SIZE)) {
 			dev_err(&mdev->pdev->dev,
 				"Test 4 data mismatch ch%d\n", ch);
 			ret = -EBADMSG;
@@ -646,10 +639,10 @@ static int test_single_2ch(struct mtdma_dev *mdev)
 free_ch:
 	for (ch = MTDMA_NUM_TEST_CH - 1; ch >= 0; ch--) {
 		if (d2h_buf[ch])
-			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+			dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 					  d2h_buf[ch], d2h_bus[ch]);
 		if (h2d_buf[ch])
-			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+			dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 					  h2d_buf[ch], h2d_bus[ch]);
 	}
 	return ret;
@@ -668,27 +661,27 @@ static int test_chain_2ch(struct mtdma_dev *mdev)
 
 	dev_info(&mdev->pdev->dev,
 		 "Test 5: chain mode in multi chain (%d channels, %u descs, size=%u)\n",
-		 MTDMA_NUM_TEST_CH, MTDMA_CHAIN_DESC_NUM, XFER_SIZE);
+		 MTDMA_NUM_TEST_CH, MTDMA_CHAIN_DESC_NUM, MTDMA_XFER_SIZE);
 
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
-		h2d_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+		h2d_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 						 &h2d_bus[ch], GFP_KERNEL);
 		if (!h2d_buf[ch]) {
 			ret = -ENOMEM;
 			goto free_ch;
 		}
-		d2h_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+		d2h_buf[ch] = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 						 &d2h_bus[ch], GFP_KERNEL);
 		if (!d2h_buf[ch]) {
 			ret = -ENOMEM;
-			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+			dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 					  h2d_buf[ch], h2d_bus[ch]);
 			h2d_buf[ch] = NULL;
 			goto free_ch;
 		}
-		for (i = 0; i < XFER_SIZE / 4; i++)
+		for (i = 0; i < MTDMA_XFER_SIZE / 4; i++)
 			((u32 *)h2d_buf[ch])[i] = 0x55550000 + ch * 0x10000 + i;
-		memset(d2h_buf[ch], 0, XFER_SIZE);
+		memset(d2h_buf[ch], 0, MTDMA_XFER_SIZE);
 	}
 
 	/* Submit H2D chains on all channels, then poll all */
@@ -697,7 +690,7 @@ static int test_chain_2ch(struct mtdma_dev *mdev)
 		mtdma_submit_chain(&mdev->rd_ch[ch],
 				   ch_ll_vaddr(mdev, ch, 0), ch_ll_ddr(ch, 0),
 				   (u64)h2d_bus[ch], ch_dev_addr(ch, 0),
-				   XFER_SIZE, extra, 0);
+				   MTDMA_XFER_SIZE, extra, 0);
 	}
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
 		int r = mtdma_poll_done(&mdev->rd_ch[ch]);
@@ -718,7 +711,7 @@ static int test_chain_2ch(struct mtdma_dev *mdev)
 		mtdma_submit_chain(&mdev->wr_ch[ch],
 				   ch_ll_vaddr(mdev, ch, 1), ch_ll_ddr(ch, 1),
 				   ch_dev_addr(ch, 0), (u64)d2h_bus[ch],
-				   XFER_SIZE, extra, CH_EN_DUMMY);
+				   MTDMA_XFER_SIZE, extra, CH_EN_DUMMY);
 	}
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
 		int r = mtdma_poll_done(&mdev->wr_ch[ch]);
@@ -734,7 +727,7 @@ static int test_chain_2ch(struct mtdma_dev *mdev)
 		goto free_ch;
 
 	for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
-		if (memcmp(h2d_buf[ch], d2h_buf[ch], XFER_SIZE)) {
+		if (memcmp(h2d_buf[ch], d2h_buf[ch], MTDMA_XFER_SIZE)) {
 			dev_err(&mdev->pdev->dev,
 				"Test 5 data mismatch ch%d\n", ch);
 			ret = -EBADMSG;
@@ -745,10 +738,10 @@ static int test_chain_2ch(struct mtdma_dev *mdev)
 free_ch:
 	for (ch = MTDMA_NUM_TEST_CH - 1; ch >= 0; ch--) {
 		if (d2h_buf[ch])
-			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+			dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 					  d2h_buf[ch], d2h_bus[ch]);
 		if (h2d_buf[ch])
-			dma_free_coherent(&mdev->pdev->dev, XFER_SIZE,
+			dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 					  h2d_buf[ch], h2d_bus[ch]);
 	}
 	return ret;
@@ -758,7 +751,7 @@ free_ch:
 static int test_block_2ch(struct mtdma_dev *mdev)
 {
 	const u32 extra = MTDMA_CHAIN_DESC_NUM - 1;
-	const u32 total  = XFER_SIZE * MTDMA_BLOCK_CNT;
+	const u32 total  = MTDMA_XFER_SIZE * MTDMA_BLOCK_CNT;
 	dma_addr_t h2d_bus[MTDMA_NUM_TEST_CH], d2h_bus[MTDMA_NUM_TEST_CH];
 	void *h2d_buf[MTDMA_NUM_TEST_CH], *d2h_buf[MTDMA_NUM_TEST_CH];
 	int i, j, ch, ret = 0;
@@ -798,7 +791,7 @@ static int test_block_2ch(struct mtdma_dev *mdev)
 	for (j = 0; j < MTDMA_BLOCK_CNT && !ret; j++) {
 		/* H2D: submit all channels for block j, then poll all */
 		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
-			dma_addr_t h2d_blk = h2d_bus[ch] + (dma_addr_t)j * XFER_SIZE;
+			dma_addr_t h2d_blk = h2d_bus[ch] + (dma_addr_t)j * MTDMA_XFER_SIZE;
 
 			mutex_lock(&mdev->rd_ch[ch].lock);
 			mtdma_submit_chain(&mdev->rd_ch[ch],
@@ -806,7 +799,7 @@ static int test_block_2ch(struct mtdma_dev *mdev)
 					   ch_ll_ddr(ch, 0),
 					   (u64)h2d_blk,
 					   ch_dev_addr(ch, j),
-					   XFER_SIZE, extra, 0);
+					   MTDMA_XFER_SIZE, extra, 0);
 		}
 		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
 			int r = mtdma_poll_done(&mdev->rd_ch[ch]);
@@ -824,7 +817,7 @@ static int test_block_2ch(struct mtdma_dev *mdev)
 
 		/* D2H: submit all channels for block j, then poll all */
 		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
-			dma_addr_t d2h_blk = d2h_bus[ch] + (dma_addr_t)j * XFER_SIZE;
+			dma_addr_t d2h_blk = d2h_bus[ch] + (dma_addr_t)j * MTDMA_XFER_SIZE;
 
 			mutex_lock(&mdev->wr_ch[ch].lock);
 			mtdma_submit_chain(&mdev->wr_ch[ch],
@@ -832,7 +825,7 @@ static int test_block_2ch(struct mtdma_dev *mdev)
 					   ch_ll_ddr(ch, 1),
 					   ch_dev_addr(ch, j),
 					   (u64)d2h_blk,
-					   XFER_SIZE, extra, CH_EN_DUMMY);
+					   MTDMA_XFER_SIZE, extra, CH_EN_DUMMY);
 		}
 		for (ch = 0; ch < MTDMA_NUM_TEST_CH; ch++) {
 			int r = mtdma_poll_done(&mdev->wr_ch[ch]);

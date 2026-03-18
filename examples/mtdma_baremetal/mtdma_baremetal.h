@@ -9,16 +9,11 @@
 #ifndef _MTDMA_BAREMETAL_H
 #define _MTDMA_BAREMETAL_H
 
+#include "mtdma_baremetal_config.h"
 #include <linux/types.h>
 #include <linux/completion.h>
 #include <linux/mutex.h>
 #include <linux/io.h>
-
-/* =========================================================
- * 一、PCIe 设备标识
- * ========================================================= */
-#define MTDMA_PCI_VENDOR_ID        0x1ed5   /* Moore Threads */
-#define MTDMA_PCI_DEVICE_ID_GPU    0x0200   /* QY GPU PF */
 
 /* =========================================================
  * 二、BAR 布局
@@ -163,8 +158,6 @@ struct mtdma_chan {
 /* =========================================================
  * 八、顶层设备上下文
  * ========================================================= */
-#define MTDMA_PCI_DEVICE_ID_GPU2   0x0400
-#define MTDMA_PCI_DEVICE_ID_HS     0x0680
 #define MTDMA_NUM_DMA_CH           64
 
 /* =========================================================
@@ -178,9 +171,6 @@ struct mtdma_chan {
  *     rd_ch[i]: BAR2 offset = MTDMA_DESC_LIST_BASE + (2*i)   * MTDMA_LL_CH_STRIDE
  *     wr_ch[i]: BAR2 offset = MTDMA_DESC_LIST_BASE + (2*i+1) * MTDMA_LL_CH_STRIDE
  * ========================================================= */
-#define MTDMA_NUM_TEST_CH       2           /* multi-chain 测试通道对数（硬件支持更多，此处取最小并行数）*/
-#define MTDMA_CHAIN_DESC_NUM    4           /* chain mode 每次传输总描述符数（含 reg-area 第 0 号）*/
-#define MTDMA_BLOCK_CNT         4           /* chain block mode 块数（每块独立链式传输，轮询后再提交）*/
 #define MTDMA_LL_CH_STRIDE      0x10000UL   /* 每通道描述符链表区 64 KB（远大于 CHAIN_DESC_NUM×32B）*/
 
 struct mtdma_dev {
