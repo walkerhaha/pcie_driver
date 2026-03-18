@@ -25,6 +25,7 @@
  *   make -C examples/mtdma_baremetal
  * 加载（确保先卸载 mtdma_baremetal，两模块不能同时绑定同一设备）：
  *   sudo insmod test2_chain_debug.ko
+ * 移植配置：统一在 mtdma_baremetal_config.h 中调整
  * 查看日志：
  *   sudo dmesg | grep T2DBG
  * 卸载：
@@ -43,22 +44,11 @@ MODULE_AUTHOR("MT EMU Debug");
 MODULE_DESCRIPTION("Test 2 chain-mode debug: verbose logging for chain-in-single-chain DMA");
 MODULE_LICENSE("GPL v2");
 
-/* 每次传输大小：64 KB（与原模块保持一致）*/
-#define XFER_SIZE  (64 * 1024)
-
-/* 设备 DDR 数据区基址（与原模块保持一致）*/
-#define DEVICE_DATA_BASE     0x010000100000ULL
-#define DEVICE_DATA_CH_SIZE  ((u64)XFER_SIZE * MTDMA_BLOCK_CNT)
-
 /* 日志前缀，便于 dmesg 中过滤 */
 #define T2DBG  "T2DBG: "
 
 /* 轮询时每 POLL_LOG_INTERVAL 次打印一次轮询状态 */
 #define POLL_LOG_INTERVAL    200
-
-/* 超时时间 */
-#define MTDMA_POLL_INTERVAL_US   500
-#define MTDMA_POLL_TIMEOUT_MS    5000U
 
 /* =========================================================
  * § 1. 地址辅助（与原模块完全相同）
@@ -73,15 +63,15 @@ static inline void __iomem *ch_ll_vaddr(struct mtdma_dev *mdev,
 
 static inline u64 ch_ll_ddr(int ch_idx, int is_wr)
 {
-	return 0x010000000000ULL + MTDMA_DESC_LIST_BASE
+	return MTDMA_BAR2_DEVICE_BASE + MTDMA_DESC_LIST_BASE
 	       + (u64)(2 * ch_idx + is_wr) * MTDMA_LL_CH_STRIDE;
 }
 
 static inline u64 ch_dev_addr(int ch_idx, int block_idx)
 {
-	return DEVICE_DATA_BASE
-	       + (u64)ch_idx    * DEVICE_DATA_CH_SIZE
-	       + (u64)block_idx * XFER_SIZE;
+	return MTDMA_DEVICE_DATA_BASE
+	       + (u64)ch_idx    * MTDMA_DEVICE_DATA_CH_SIZE
+	       + (u64)block_idx * MTDMA_XFER_SIZE;
 }
 
 /* =========================================================
@@ -520,7 +510,7 @@ static int test2_chain_1ch_debug(struct mtdma_dev *mdev)
 		 T2DBG "Test 2 debug: chain mode in single chain\n");
 	dev_info(&mdev->pdev->dev,
 		 T2DBG "  MTDMA_CHAIN_DESC_NUM=%u  XFER_SIZE=%u  extra_descs=%u\n",
-		 MTDMA_CHAIN_DESC_NUM, XFER_SIZE, extra);
+		 MTDMA_CHAIN_DESC_NUM, MTDMA_XFER_SIZE, extra);
 	dev_info(&mdev->pdev->dev,
 		 T2DBG "  dev_addr (device DDR)=0x%016llx\n", dev_addr);
 	dev_info(&mdev->pdev->dev,
@@ -535,20 +525,20 @@ static int test2_chain_1ch_debug(struct mtdma_dev *mdev)
 		 (unsigned long)(wr_ll - mdev->bar2));
 
 	/* ---- 分配 DMA 一致性内存 ---- */
-	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+	h2d_buf = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 				     &h2d_bus, GFP_KERNEL);
 	if (!h2d_buf) {
 		dev_err(&mdev->pdev->dev,
 			T2DBG "ENOMEM: h2d_buf alloc failed (%u bytes)\n",
-			XFER_SIZE);
+			MTDMA_XFER_SIZE);
 		return -ENOMEM;
 	}
-	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, XFER_SIZE,
+	d2h_buf = dma_alloc_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE,
 				     &d2h_bus, GFP_KERNEL);
 	if (!d2h_buf) {
 		dev_err(&mdev->pdev->dev,
 			T2DBG "ENOMEM: d2h_buf alloc failed (%u bytes)\n",
-			XFER_SIZE);
+			MTDMA_XFER_SIZE);
 		ret = -ENOMEM;
 		goto free_h2d;
 	}
@@ -561,14 +551,14 @@ static int test2_chain_1ch_debug(struct mtdma_dev *mdev)
 		 d2h_buf, (u64)d2h_bus);
 
 	/* ---- 填充测试数据（图案：0x22220000 + index）---- */
-	for (i = 0; i < XFER_SIZE / 4; i++)
+	for (i = 0; i < MTDMA_XFER_SIZE / 4; i++)
 		((u32 *)h2d_buf)[i] = 0x22220000 + i;
-	memset(d2h_buf, 0, XFER_SIZE);
+	memset(d2h_buf, 0, MTDMA_XFER_SIZE);
 
 	dev_info(&mdev->pdev->dev,
 		 T2DBG "h2d pattern [0]=0x%08x [1]=0x%08x ... [last]=0x%08x\n",
 		 ((u32 *)h2d_buf)[0], ((u32 *)h2d_buf)[1],
-		 ((u32 *)h2d_buf)[XFER_SIZE / 4 - 1]);
+		 ((u32 *)h2d_buf)[MTDMA_XFER_SIZE / 4 - 1]);
 
 	/* ====================================================
 	 * H2D（Host → Device）：rd_ch[0]，链式，dir_flags=0
@@ -592,7 +582,7 @@ static int test2_chain_1ch_debug(struct mtdma_dev *mdev)
 	dbg_submit_chain(&mdev->pdev->dev,
 			 &mdev->rd_ch[0], "rd_ch[0]/H2D",
 			 rd_ll, rd_ddr,
-			 (u64)h2d_bus, dev_addr, XFER_SIZE, extra, 0);
+			 (u64)h2d_bus, dev_addr, MTDMA_XFER_SIZE, extra, 0);
 
 	ret = dbg_poll_done(&mdev->pdev->dev, &mdev->rd_ch[0], "rd_ch[0]/H2D");
 	t1 = ktime_get();
@@ -631,7 +621,7 @@ static int test2_chain_1ch_debug(struct mtdma_dev *mdev)
 	dbg_submit_chain(&mdev->pdev->dev,
 			 &mdev->wr_ch[0], "wr_ch[0]/D2H",
 			 wr_ll, wr_ddr,
-			 dev_addr, (u64)d2h_bus, XFER_SIZE, extra, CH_EN_DUMMY);
+			 dev_addr, (u64)d2h_bus, MTDMA_XFER_SIZE, extra, CH_EN_DUMMY);
 
 	ret = dbg_poll_done(&mdev->pdev->dev, &mdev->wr_ch[0], "wr_ch[0]/D2H");
 	t1 = ktime_get();
@@ -650,9 +640,9 @@ static int test2_chain_1ch_debug(struct mtdma_dev *mdev)
 
 	/* ---- 数据校验 ---- */
 	dev_info(&mdev->pdev->dev,
-		 T2DBG "--- memcmp (%u bytes) ---\n", XFER_SIZE);
+		 T2DBG "--- memcmp (%u bytes) ---\n", MTDMA_XFER_SIZE);
 	ret = dbg_memcmp_verbose(&mdev->pdev->dev,
-				 h2d_buf, d2h_buf, XFER_SIZE, "H2D<->D2H");
+				 h2d_buf, d2h_buf, MTDMA_XFER_SIZE, "H2D<->D2H");
 
 	dev_info(&mdev->pdev->dev,
 		 T2DBG "Test 2 %s\n", ret ? "FAILED" : "PASSED");
@@ -660,9 +650,9 @@ static int test2_chain_1ch_debug(struct mtdma_dev *mdev)
 		 T2DBG "======================================================\n");
 
 free_d2h:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, d2h_buf, d2h_bus);
+	dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE, d2h_buf, d2h_bus);
 free_h2d:
-	dma_free_coherent(&mdev->pdev->dev, XFER_SIZE, h2d_buf, h2d_bus);
+	dma_free_coherent(&mdev->pdev->dev, MTDMA_XFER_SIZE, h2d_buf, h2d_bus);
 	return ret;
 }
 

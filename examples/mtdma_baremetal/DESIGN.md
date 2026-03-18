@@ -362,6 +362,8 @@ MTDMA_BLOCK_CNT  = 4
 
 ## 十、构建与使用
 
+移植到新平台时，优先只修改 `mtdma_baremetal_config.h`；示例里需要人工确认的 PCI ID、传输大小、轮询超时、测试并发度、设备侧 DDR 地址规划都已集中到该文件中，`mtdma_baremetal.c` 与 `test2_chain_debug.c` 共用同一份配置。
+
 ```bash
 # 构建
 cd examples/mtdma_baremetal
