@@ -3,9 +3,9 @@
 本文只基于仓库里的实际实现来说明 DMA 链式传输测试，**不参考 `examples/docs/`**。  
 主要依据：
 
-- `/home/runner/work/pcie_driver/pcie_driver/examples/mtdma_baremetal/mtdma_baremetal.h`
-- `/home/runner/work/pcie_driver/pcie_driver/examples/mtdma_baremetal/mtdma_baremetal.c`
-- `/home/runner/work/pcie_driver/pcie_driver/examples/mtdma_baremetal/test2_chain_debug.c`
+- `examples/mtdma_baremetal/mtdma_baremetal.h`
+- `examples/mtdma_baremetal/mtdma_baremetal.c`
+- `examples/mtdma_baremetal/test2_chain_debug.c`
 
 重点分析的是：
 
@@ -18,7 +18,7 @@
 
 ## 1. 先看测试本身在做什么
 
-以 `/home/runner/work/pcie_driver/pcie_driver/examples/mtdma_baremetal/mtdma_baremetal.c` 里的 `test_chain_1ch()` 为例：
+以 `examples/mtdma_baremetal/mtdma_baremetal.c` 里的 `test_chain_1ch()` 为例：
 
 1. 分配两块主机侧一致性 DMA 缓冲区：
    - `h2d_buf`：Host → Device
@@ -131,7 +131,7 @@ LBAR_BASIC = (extra_descs << 16) | 1;
 
 ## 4. 描述符格式是什么样
 
-描述符结构体定义在 `/home/runner/work/pcie_driver/pcie_driver/examples/mtdma_baremetal/mtdma_baremetal.h`：
+描述符结构体定义在 `examples/mtdma_baremetal/mtdma_baremetal.h`：
 
 ```c
 struct mtdma_desc {
@@ -406,7 +406,7 @@ MTDMA_BLOCK_CNT = 4
 
 如果想看更详细的运行时展开，可以直接看：
 
-- `/home/runner/work/pcie_driver/pcie_driver/examples/mtdma_baremetal/test2_chain_debug.c`
+- `examples/mtdma_baremetal/test2_chain_debug.c`
 
 这个调试模块会把每个 descriptor 的：
 
