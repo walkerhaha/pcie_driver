@@ -5,6 +5,7 @@ test/_codeql_build_dir/
 # Kernel module build artifacts
 *.ko
 *.o
+*.d
 *.mod
 *.mod.c
 *.order

@@ -23,3 +23,7 @@ For AI-oriented, code-independent reconstruction of the PCIe & DMA driver, envir
 - `docs/skills/test-suite-skill.zh-CN.md`
 - `docs/skills/troubleshooting-skill.zh-CN.md`
 - `docs/skills/source-to-skill.mapping.zh-CN.md`
+
+For a Chinese walkthrough of the bare-metal DMA chain-mode test flow, registers, and descriptor format, see:
+
+- `docs/dma-chain-test-analysis.zh-CN.md`
