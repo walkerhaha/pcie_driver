@@ -12,21 +12,21 @@
 
 | 区域 | 基址 | 说明 |
 |---|---:|---|
-| DMA Common | `0x380000` | 全局配置、通道汇总状态、merge interrupt、OSID/Context 等 |
-| DMA Channel | `0x383000` | 每个 channel 的寄存器窗口 |
+| DMA Common | 每个项目基址都可能变化，因此common base addr应该设成全局可配的 | 全局配置、通道汇总状态、merge interrupt、OSID/Context 等 |
+| DMA Channel | common_base_addr+0x3000 | 每个 channel 的寄存器窗口 |
 
 ### 0.2 Channel 地址布局
 
 每个 channel 步长为 `0x1000`：
 
-- `RD chN base = 0x383000 + N * 0x1000`
-- `WR chN base = 0x383000 + N * 0x1000 + 0x800`
+- `RD chN base = common_base_addr + N * 0x1000`
+- `WR chN base = channel_base_addr + N * 0x1000 + 0x800`
 
 ---
 
 ## 1. Common 寄存器表
 
-> 基址：`0x380000`
+> 基址：common_base_addr
 
 ### 1.1 基础配置类
 
