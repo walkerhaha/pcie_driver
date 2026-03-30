@@ -61,7 +61,7 @@
 
 ## 2. RD Channel 寄存器表
 
-> RD chN 基址：channel_base_addr + N * 0x1000`
+> RD chN 基址：`channel_base_addr + N * 0x1000`
 
 | 名称 | 相对 RD 基址偏移 | 含义 | 当前驱动中的 value / 语义 |
 |---|---:|---|---|
@@ -75,45 +75,44 @@
 | `REG_DMA_RCH_PAGEFAULT_STS` | `0x058` | RD pagefault status | 后续统一分析 |
 | `REG_DMA_RCH_PAGEFAULT_VPAGE_H` | `0x05C` | RD fault vpage 高位 | 后续统一分析 |
 | `REG_DMA_RCH_PAGEFAULT_VPAGE_L` | `0x060` | RD fault vpage 低位 | 后续统一分析 |
-| `REG_DMA_CH_INTR_IMSK` | `0x0C4` | 通道中断 mask | 后续统一分析 |
-| `REG_DMA_CH_INTR_RAW` | `0x0C8` | 通道中断 raw / 写回清中断 | ISR 主要读写它，后续统一分析 |
-| `REG_DMA_CH_INTR_STATUS` | `0x0CC` | 通道中断状态 | PF / VF ISR 用来先判定 done，后续统一分析 |
-| `REG_DMA_CH_STATUS` | `0x0D0` | 通道状态 | `BIT(0)` = busy |
-| `REG_DMA_CH_LBAR_BASIC` | `0x0D4` | 链表基本参数 | `bits[31:16]=desc 数`, `bit0=chain_en` |
-| `REG_DMA_CH_DESC_OPT` | `0x400` | 第 0 个描述符起始地址 | desc0 放在寄存器区 |
-| `REG_DMA_CH_ACNT` | `0x404` | 计数字段 | 对应 desc 的 `cnt` |
-| `REG_DMA_CH_SAR_L/H` | `0x408 / 0x40C` | 源地址 | desc 字段 |
-| `REG_DMA_CH_DAR_L/H` | `0x410 / 0x414` | 目的地址 | desc 字段 |
-| `REG_DMA_CH_LAR_L/H` | `0x418 / 0x41C` | 下一个描述符地址 | desc 字段 |
+| `REG_DMA_RCH_INTR_IMSK` | `0x0C4` | 通道中断 mask | 后续统一分析 |
+| `REG_DMA_RCH_INTR_RAW` | `0x0C8` | 通道中断 raw / 写回清中断 | ISR 主要读写它，后续统一分析 |
+| `REG_DMA_RCH_INTR_STATUS` | `0x0CC` | 通道中断状态 | PF / VF ISR 用来先判定 done，后续统一分析 |
+| `REG_DMA_RCH_STATUS` | `0x0D0` | 通道状态 | `BIT(0)` = busy |
+| `REG_DMA_RCH_LBAR_BASIC` | `0x0D4` | 链表基本参数 | `bits[31:16]=desc 数`, `bit0=chain_en` |
+| `REG_DMA_RCH_DESC_OPT` | `0x400` | 第 0 个描述符起始地址 | desc0 放在寄存器区 |
+| `REG_DMA_RCH_ACNT` | `0x404` | 计数字段 | 对应 desc 的 `cnt` |
+| `REG_DMA_RCH_SAR_L/H` | `0x408 / 0x40C` | 源地址 | desc 字段 |
+| `REG_DMA_RCH_DAR_L/H` | `0x410 / 0x414` | 目的地址 | desc 字段 |
+| `REG_DMA_RCH_LAR_L/H` | `0x418 / 0x41C` | 下一个描述符地址 | desc 字段 |
 
 ---
 
 ## 3. WR Channel 寄存器表
 
-> WR chN 基址：`0x383000 + N * 0x1000 + 0x800`
+> WR chN 基址：`channel_base_addr + N * 0x1000 + 0x800`
 
 | 名称 | 相对 WR 基址偏移 | 绝对窗口偏移示例 | 含义 | 当前驱动中的 value / 语义 |
 |---|---:|---:|---|---|
-| `REG_DMA_CH_ENABLE` | `0x000` | `0x800` | 通道使能 | `BIT(0)` 启动 |
-| `REG_DMA_CH_DIRECTION` | `0x004` | `0x804` | 方向 / 模式控制 | 同 RD |
-| `REG_DUMMY_CH_ADDR_L/H` | `0x008 / 0x00C` | `0x808 / 0x80C` | dummy read 地址 | 同 RD |
-| `REG_DMA_CH_MMU_ADDR_TYPE` | `0x010` | `0x810` | MMU 地址类型 | 同 RD |
-| `REG_DMA_CH_FC` | `0x020` | `0x820` | flow control | 同 RD |
-| `0x050` | `0x850` | `dma_wch_pagefault_raw` | WR pagefault raw / status | 脚本命名为 `dma_wch_mmu_pagefault` |
-| `0x054` | `0x854` | `dma_wch_pagefault_imsk` | WR pagefault mask | 脚本打印 |
-| `0x058` | `0x858` | `dma_wch_pagefault_sts` | WR pagefault status | 脚本打印 |
-| `0x05C` | `0x85C` | `dma_wch_pagefault_vpage_h` | WR fault vpage 高位 | 脚本打印 |
-| `0x060` | `0x860` | `dma_wch_pagefault_vpage_l` | WR fault vpage 低位 | 脚本打印 |
-| `REG_DMA_CH_INTR_IMSK` | `0x0C4` | `0x8C4` | 通道中断 mask | 当前多处写 `0` |
-| `REG_DMA_CH_INTR_RAW` | `0x0C8` | `0x8C8` | 通道中断 raw | ISR ack 用 |
-| `REG_DMA_CH_INTR_STATUS` | `0x0CC` | `0x8CC` | 通道中断状态 | PF / VF ISR 用来先判定 done |
-| `REG_DMA_CH_STATUS` | `0x0D0` | `0x8D0` | 通道状态 | `BIT(0)` = busy |
-| `REG_DMA_CH_LBAR_BASIC` | `0x0D4` | `0x8D4` | 链表基本参数 | 同 RD |
-| `REG_DMA_CH_DESC_OPT` | `0x400` | `0xC00` | 第 0 个描述符 | 同 RD |
-| `REG_DMA_CH_ACNT` | `0x404` | `0xC04` | 计数字段 | 同 RD |
-| `REG_DMA_CH_SAR_L/H` | `0x408 / 0x40C` | `0xC08 / 0xC0C` | 源地址 | 同 RD |
-| `REG_DMA_CH_DAR_L/H` | `0x410 / 0x414` | `0xC10 / 0xC14` | 目的地址 | 同 RD |
-| `REG_DMA_CH_LAR_L/H` | `0x418 / 0x41C` | `0xC18 / 0xC1C` | next desc 地址 | 同 RD |
+| `REG_DMA_WCH_ENABLE` | `0x000` | `0x800` | 通道使能 | `BIT(0)` 启动 |
+| `REG_DMA_WCH_DIRECTION` | `0x004` | `0x804` | 方向 / 模式控制 | 同 RD |
+| `REG_DUMMY_WCH_ADDR_L/H` | `0x008 / 0x00C` | `0x808 / 0x80C` | dummy read 地址 | 同 RD |
+| `REG_DMA_WCH_MMU_ADDR_TYPE` | `0x010` | `0x810` | MMU 地址类型 | 同 RD |
+| `REG_DMA_WCH_PAGEFAULT_RAW` | `0x050` | `0x850` | WR pagefault raw / status | 后续统一分析 |
+| `REG_DMA_WCH_PAGEFAULT_IMSK`| `0x054` | `0x854` | WR pagefault mask | 后续统一分析 |
+| `REG_DMA_WCH_PAGEFAULT_STS` | `0x058` | `0x858` | WR pagefault status | 后续统一分析 |
+| `REG_DMA_WCH_PAGEFAULT_VPAGE_H` | `0x05C` | `0x85C` | WR fault vpage 高位 | 后续统一分析 |
+| `REG_DMA_WCH_PAGEFAULT_VPAGE_L` | `0x060` | `0x860` | WR fault vpage 低位 | 后续统一分析 |
+| `REG_DMA_WCH_INTR_IMSK` | `0x0C4` | `0x8C4` | 通道中断 mask | 后续统一分析，当前多处写 `0` |
+| `REG_DMA_WCH_INTR_RAW` | `0x0C8` | `0x8C8` | 通道中断 raw | 后续统一分析，ISR ack 用 |
+| `REG_DMA_WCH_INTR_STATUS` | `0x0CC` | `0x8CC` | 通道中断状态 | 后续统一分析，PF / VF ISR 用来先判定 done |
+| `REG_DMA_WCH_STATUS` | `0x0D0` | `0x8D0` | 通道状态 | `BIT(0)` = busy |
+| `REG_DMA_WCH_LBAR_BASIC` | `0x0D4` | `0x8D4` | 链表基本参数 | 同 RD |
+| `REG_DMA_WCH_DESC_OPT` | `0x400` | `0xC00` | 第 0 个描述符 | 同 RD |
+| `REG_DMA_WCH_ACNT` | `0x404` | `0xC04` | 计数字段 | 同 RD |
+| `REG_DMA_WCH_SAR_L/H` | `0x408 / 0x40C` | `0xC08 / 0xC0C` | 源地址 | 同 RD |
+| `REG_DMA_WCH_DAR_L/H` | `0x410 / 0x414` | `0xC10 / 0xC14` | 目的地址 | 同 RD |
+| `REG_DMA_WCH_LAR_L/H` | `0x418 / 0x41C` | `0xC18 / 0xC1C` | next desc 地址 | 同 RD |
 
 ---
 
@@ -184,48 +183,15 @@ VF 路径没有走 PF 这套 merge bitmap 解码，而是直接固定检查：
 
 ---
 
-## 5. MMU / OSID / Context / Page Fault 寄存器表
+## 5. 描述符预取和数据传输方向配置
 
-### 5.1 MMU 地址类型
+### 5.1 设计框架介绍
 
-| 寄存器 | 偏移 | 作用 | 当前编码 |
-|---|---:|---|---|
-| `REG_DMA_CH_MMU_ADDR_TYPE` | `0x010` | 指示本次 DMA 的地址类型 / 访问方向 | 当前驱动直接写 4 个离散编码：`0x0=MEM_TO_MEM`, `0x100=MEM_TO_DEV`, `0x1=DEV_TO_MEM`, `0x101=DEV_TO_DEV`；从取值形态看更像按位组合，而不是连续枚举值 |
+DMA在架构上包含两个CORE，分别用来控制RCH和WCH。对外AXI接口包含MST0,MST1,MST2,MST3共四个，其中MST0和MST1是常规读写端口，MST2和MST3用于MMU。MST0用于远端访问，MST1用于近端访问。
+它们之间通过CORE SWITCH来调配，确保CORE可以通过合适的端口进行交互。具体是根据描述符存放地址的不同及具体数据搬运方向的需求，来配置相应寄存器。
 
-### 5.2 Page Fault 类
+### 5.2 寄存器用法
 
-#### RD Channel Page Fault Registers
-
-| 偏移 | 含义 |
-|---:|---|
-| `0x050` | pagefault raw |
-| `0x054` | pagefault mask |
-| `0x058` | pagefault status |
-| `0x05C` | fault virtual page high |
-| `0x060` | fault virtual page low |
-
-#### WR Channel Page Fault Registers
-
-| 偏移 | 含义 |
-|---:|---|
-| `0x850` | pagefault 原始事件寄存器（脚本命名为 `dma_wch_mmu_pagefault`，语义偏 raw/summary，和 `0x858` 的 status 分开看更稳妥） |
-| `0x854` | pagefault mask |
-| `0x858` | pagefault status |
-| `0x85C` | fault virtual page high |
-| `0x860` | fault virtual page low |
-
-### 5.3 OSID / Context 相关
-
-| 寄存器 / 区域 | 偏移 | 当前代码中的表现 | 说明 |
-|---|---:|---|---|
-| `REG_DMA_COMM_COMM_ENABLE` | `0x010` | 注释里提示 `BIT(0)` 可能是 `osid_en` | OSID 总开关候选 |
-| `REG_DMA_COMM_OSID_SUPER` | `0x014` | 定义了但未使用 | OSID 的 supervisor / 特权控制候选 |
-| `REG_DMA_COMM_CH_OSID(i)` | `0x020 + 4 * i` | 代码写 `0x1`，但脚本打印名是 `dma_ch_secure` | 该组寄存器存在 “OSID / secure” 命名冲突 |
-| `0x2000 + 4 * i` | `dma_ch_osid`（脚本命名） | 初始化按通道索引写入对应编号 | 更像每通道实际 OSID 值表 |
-| `0x2800 + 4 * i` | `dma_ch_context_id`（脚本命名） | 只打印 | 更像与 MMU context 绑定 |
-
-### 5.4 备注
-
-- 旧驱动中，OSID 相关寄存器存在命名不一致现象。  
-- 综合初始化写法、脚本打印名和平台 MMU 映射寄存器命名，OSID 可以先理解为 DMA 请求的源身份 / 隔离域标签。  
-- 从当前行为看，`0x2000 + 4 * i` 更像 per-channel OSID 值表，而 `0x020 + 4 * i` 更像安全属性或使能属性。  
+`REG_DMA_RCH_DIRECTION`和`REG_DMA_WCH_DIRECTION`分别用来控制RCH及WCH的描述符预取端口和数据传输方向。
+具体来讲，`REG_DMA_RCH_DIRECTION`的`BIT(0)`用于控制描述符预取端口，0代表存放在近端，通过MST1进行预取，1代表存放在远端，通过MST0进行预取。`bits[2:1]`用于控制数据传输方向，00和10均是H2D，01和11均是H2H。
+`REG_DMA_WCH_DIRECTION`的`BIT(0)`用于控制描述符预取端口，0代表存放在远端，通过MST1进行预取，1代表存放在近端，通过MST0进行预取。`bits[2:1]`用于控制数据传输方向，00和10均是D2H，01和11均是D2D。
