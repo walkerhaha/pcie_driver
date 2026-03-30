@@ -33,29 +33,29 @@
 | 名称 | 偏移 | 含义 | 当前驱动中的用法/值 |
 |---|---:|---|---|
 | `REG_DMA_COMM_BASIC_PARAM` | `0x000` | DMA 基本参数/版本 | 只读打印版本号 |
-| `REG_DMA_COMM_COMM_ENABLE` | `0x010` | Common 功能总开关 | 代码注释提示 `BIT(0)` 可能是 `osid_en`，但当前未开启 |
-| `REG_DMA_COMM_OSID_SUPER` | `0x014` | OSID super 配置 | 已定义，当前代码未实际写入 |
-| `REG_DMA_COMM_CH_OSID(i)` | `0x020 + 4 * i` | 头文件命名为通道 OSID | 当前初始化时写 `0x1`；但 dump 脚本把这组寄存器打印为 `dma_ch_secure`。现阶段更建议把它视为“OSID/secure 属性寄存器”，不要直接当成最终 OSID 值表 |
-| `0x018` | `dma_ccmode_disable`（仅脚本命名） | 可能是 cache-coherent / cc mode 相关控制 | 仅在 dump 脚本中打印，正式头文件未定义 |
-| `REG_DMA_COMM_CH_NUM` | `0x400` | 通道数量配置 | 写 `PCIE_DMA_CH_NUM - 1`，当前即 63 |
-| `REG_DMA_COMM_MST0_BLEN` | `0x408` | MST0 burst 长度 | 当前写 `(4<<4) \| 4 = 0x44` |
-| `REG_DMA_COMM_MST0_CACHE` | `0x420` | MST0 cache 属性 | dump 脚本会读取，当前驱动未写入配置 |
-| `REG_DMA_COMM_MST0_PROT` | `0x424` | MST0 prot 属性 | dump 脚本会读取，当前驱动未写入配置 |
-| `REG_DMA_COMM_MST2_CACHE` | `0x428` | MST2 cache 属性 | 只定义 / 脚本打印 |
-| `REG_DMA_COMM_MST1_BLEN` | `0x608` | MST1 burst 长度 | 当前写 `0x44` |
-| `REG_DMA_COMM_MST1_CACHE` | `0x620` | MST1 cache 属性 | dump 脚本会读取，当前驱动未写入配置 |
-| `REG_DMA_COMM_MST1_PROT` | `0x624` | MST1 prot 属性 | dump 脚本会读取，当前驱动未写入配置 |
-| `0x628` | `dma_mst3_cache`（脚本命名） | 可能是另一路 cache 属性 | 仅脚本打印 |
+| `REG_DMA_COMM_COMM_ENABLE` | `0x010` | 一些Common 功能总开关，当前只定义了osid_en | `BIT(0)` 是 `osid_en`，当前未开启 |
+| `REG_DMA_COMM_OSID_SUPER` | `0x014` | OSID super 配置 | 暂不配置 |
+| `REG_DMA_COMM_CH_OSID` | `0x020` | 配置chain id | 配置`cfg_ch_prot`，`cfg_ch_prot`，`cfg_ch_hyper`，`cfg_ch_user`等寄存器，暂不配置 |
+| `REG_DMA_COMM_CC_MODE_DISBALE` | `0x018` | cc mode 使能控制 | 暂不配置 |
+| `REG_DMA_COMM_CH_NUM` | `0x400` | 通道数量配置 | 设为全局可配 |
+| `REG_DMA_COMM_MST0_BLEN` | `0x408` | MST0 burst 长度 | 设为全局可配 |
+| `REG_DMA_COMM_MST0_CACHE` | `0x420` | MST0 cache 属性 | 暂不配置 |
+| `REG_DMA_COMM_MST0_PROT` | `0x424` | MST0 prot 属性 | 暂不配置 |
+| `REG_DMA_COMM_MST2_CACHE` | `0x428` | MST2 cache 属性 | 暂不配置 |
+| `REG_DMA_COMM_MST1_BLEN` | `0x608` | MST1 burst 长度 | 设为全局可配 |
+| `REG_DMA_COMM_MST1_CACHE` | `0x620` | MST1 cache 属性 | 暂不配置 |
+| `REG_DMA_COMM_MST1_PROT` | `0x624` | MST1 prot 属性 | 暂不配置 |
+| `REG_DMA_COMM_MST3_CACHE` | `0x628` | MST3 cache 属性 | 暂不配置 |
 
 ### 1.2 Common 状态 / 汇总类
 
 | 名称 | 偏移 | 含义 | 说明 |
 |---|---:|---|---|
 | `REG_DMA_COMM_WORK_STS` | `0xD00` | DMA 工作状态 | 初始化后会检查是否 busy |
-| `0x1000 + 4 * ch` | `dma_rch_fc`（脚本命名） | RD channel flow control 参数 | 仅脚本打印 |
-| `0x1800 + 4 * ch` | `dma_wch_fc`（脚本命名） | WR channel flow control 参数 | 仅脚本打印 |
-| `0x2000 + 4 * ch` | `dma_ch_osid`（脚本命名） | 更像真正的 per-channel OSID 值表 | 当前代码按通道索引写入对应编号 |
-| `0x2800 + 4 * ch` | `dma_ch_context_id`（脚本命名） | 每通道 context id | 仅脚本打印 |
+| `REG_DMA_COMM_RCH_FC` | `0x1000` | RD channel flow control 参数 | 暂不配置 |
+| `REG_DMA_COMM_WCH_FC` | `0x1800` | WR channel flow control 参数 | 暂不配置 |
+| `REG_DMA_ALLOC_CH_OSID` | `0x2000` | DMA channel OSID 配置寄存器 | 暂不配置 |
+| `REG_DMA_ALLOC_CH_CONTEXT_ID` | `0x2800` | DMA context_id 配置寄存器 | 暂不配置 |
 
 ---
 
