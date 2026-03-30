@@ -61,25 +61,23 @@
 
 ## 2. RD Channel 寄存器表
 
-> RD chN 基址：`0x383000 + N * 0x1000`
+> RD chN 基址：channel_base_addr + N * 0x1000`
 
 | 名称 | 相对 RD 基址偏移 | 含义 | 当前驱动中的 value / 语义 |
 |---|---:|---|---|
-| `REG_DMA_CH_ENABLE` | `0x000` | 通道使能 | `BIT(0)` 启动 |
-| `REG_DMA_CH_DIRECTION` | `0x004` | 方向 / 模式控制 | 见后文“方向编码” |
-| `REG_DUMMY_CH_ADDR_L` | `0x008` | dummy read 地址低 32 位 | 某些模式下读取 |
-| `REG_DUMMY_CH_ADDR_H` | `0x00C` | dummy read 地址高 32 位 | 同上 |
-| `REG_DMA_CH_MMU_ADDR_TYPE` | `0x010` | MMU 地址类型 | `0x0 / 0x1 / 0x100 / 0x101` |
-| `REG_DMA_CH_FC` | `0x020` | flow control | core 路径会写 `BIT(0) \| (WCH_FC_THLD<<1)` |
-| `REG_DMA_CH_USER` | `0x024` | 用户属性 | 已定义，当前未实际使用 |
-| `0x050` | `dma_rch_pagefault_raw` | RD pagefault raw | 脚本打印 |
-| `0x054` | `dma_rch_pagefault_imsk` | RD pagefault mask | 脚本打印 |
-| `0x058` | `dma_rch_pagefault_sts` | RD pagefault status | 脚本打印 |
-| `0x05C` | `dma_rch_pagefault_vpage_h` | RD fault vpage 高位 | 脚本打印 |
-| `0x060` | `dma_rch_pagefault_vpage_l` | RD fault vpage 低位 | 脚本打印 |
-| `REG_DMA_CH_INTR_IMSK` | `0x0C4` | 通道中断 mask | 当前多处直接写 `0` |
-| `REG_DMA_CH_INTR_RAW` | `0x0C8` | 通道中断 raw / 写回清中断 | ISR 主要读写它 |
-| `REG_DMA_CH_INTR_STATUS` | `0x0CC` | 通道中断状态 | PF / VF ISR 用来先判定 done |
+| `REG_DMA_RCH_ENABLE` | `0x000` | 通道使能 | `BIT(0)` 启动 |
+| `REG_DMA_RCH_DIRECTION` | `0x004` | 方向 / 模式控制 | 见后文“方向编码” |
+| `REG_DUMMY_RCH_ADDR_L` | `0x008` | dummy read 地址低 32 位 | dummy read使能时读取 |
+| `REG_DUMMY_RCH_ADDR_H` | `0x00C` | dummy read 地址高 32 位 | dummy read使能时读取 |
+| `REG_DMA_RCH_MMU_ADDR_TYPE` | `0x010` | MMU 地址类型 | `BIT(0)`配置rd ch src addr type；`BIT(8)`配置rd ch dst addr type；`BIT(16)`配置link block addr type。配置为0是physical addr，配置为1是virtual addr |
+| `REG_DMA_RCH_PAGEFAULT_RAW` | `0x050` | RD pagefault raw | 后续统一分析 |
+| `REG_DMA_RCH_PAGEFAULT_IMSK` | `0x054` | RD pagefault mask | 后续统一分析 |
+| `REG_DMA_RCH_PAGEFAULT_STS` | `0x058` | RD pagefault status | 后续统一分析 |
+| `REG_DMA_RCH_PAGEFAULT_VPAGE_H` | `0x05C` | RD fault vpage 高位 | 后续统一分析 |
+| `REG_DMA_RCH_PAGEFAULT_VPAGE_L` | `0x060` | RD fault vpage 低位 | 后续统一分析 |
+| `REG_DMA_CH_INTR_IMSK` | `0x0C4` | 通道中断 mask | 后续统一分析 |
+| `REG_DMA_CH_INTR_RAW` | `0x0C8` | 通道中断 raw / 写回清中断 | ISR 主要读写它，后续统一分析 |
+| `REG_DMA_CH_INTR_STATUS` | `0x0CC` | 通道中断状态 | PF / VF ISR 用来先判定 done，后续统一分析 |
 | `REG_DMA_CH_STATUS` | `0x0D0` | 通道状态 | `BIT(0)` = busy |
 | `REG_DMA_CH_LBAR_BASIC` | `0x0D4` | 链表基本参数 | `bits[31:16]=desc 数`, `bit0=chain_en` |
 | `REG_DMA_CH_DESC_OPT` | `0x400` | 第 0 个描述符起始地址 | desc0 放在寄存器区 |
