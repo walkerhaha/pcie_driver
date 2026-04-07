@@ -1135,8 +1135,8 @@ dmaengine / virt-dma / mtdma core
 
 这个问题放到当前仓库里，建议拆成两层理解：
 
-1. **主机侧可访问地址空间（host-visible）**
-2. **device 侧逻辑地址空间（device-local / logical）**
+1. **主机侧可访问地址空间 (host-visible)**
+2. **device 侧逻辑地址空间 (device-local / logical)**
 
 二者都被代码大量使用，但来源完全不同。
 
@@ -1316,7 +1316,7 @@ DMA bare 路径里：
 
 因此可以把当前链路压成一句话：
 
-> **内核通过 PCI BAR 拿到 host-visible 地址窗口，通过仓库内固定逻辑地址布局组织 device-local 空间，再经由 sysfs + `/dev` + `mmap/ioctl` 暴露给测试程序。**
+> **内核通过 PCI BAR 拿到 host-visible 地址窗口，通过仓库内固定逻辑地址布局组织 device-local 空间，再经由 sysfs + `/dev` + `mmap / ioctl` 暴露给测试程序。**
 
 ---
 
@@ -1331,7 +1331,7 @@ DMA bare 路径里：
 1. **BAR 寄存器轮询**
    - 例如某个 doorbell/status 寄存器等待置位
 2. **共享内存 / DMA buffer / completion 区轮询**
-   - 例如 ring head/tail、completion word、mailbox memory
+   - 例如 ring head / tail、completion word、mailbox memory
 3. **地址翻译状态轮询**
    - 例如 IATU/MMU/EATA 配置状态、映射生效状态
 
@@ -1355,7 +1355,7 @@ DMA bare 路径里：
 
 ### 21.3 强烈建议先做“地址域白名单”
 
-当前仓库已经有直接暴露 BAR/CFG 的测试能力，所以如果再做轮询，必须比现有接口更收敛。
+当前仓库已经有直接暴露 BAR / CFG 的测试能力，所以如果再做轮询，必须比现有接口更收敛。
 
 建议只允许轮询下面这些受控范围：
 
@@ -1485,9 +1485,9 @@ DMA bare 路径里：
 请求语义至少应包含：
 
 - 轮询对象类型
-- 目标域（PF / VF / dmabuf / debug）
+- 目标域 (PF / VF / dmabuf / debug)
 - 域内 offset 或命名对象
-- 数据宽度（8/16/32/64）
+- 数据宽度 (8 / 16 / 32 / 64)
 - 比较条件
 - 掩码
 - 期望值
@@ -1498,7 +1498,7 @@ DMA bare 路径里：
 
 - 是否命中
 - 最后一次读取值
-- 结束原因（命中 / 超时 / 取消 / 非法地址）
+- 结束原因 (命中 / 超时 / 取消 / 非法地址)
 
 ### 22.4 用户态库建议怎么接
 
