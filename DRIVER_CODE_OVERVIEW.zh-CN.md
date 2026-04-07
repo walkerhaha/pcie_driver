@@ -459,8 +459,425 @@
 - **mm 文件**：负责设备内存分配
 - **各种寄存器头文件**：负责把硬件寄存器抽象成代码宏
 
-如果后续你需要，我还可以继续补一版：
+## 13. 按函数级别补充说明
 
-1. **按函数级别展开的说明文档**
-2. **带初始化时序图的说明文档**
-3. **面向用户态测试程序的 ioctl 使用说明**
+这一节不追求把每个静态辅助函数都展开，而是优先解释“真正决定驱动行为”的关键函数。
+
+### 13.1 `mt-emu-gpu.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `pcie_emu_gpu_probe()` | GPU PF 的总初始化入口。完成设备使能、BAR 映射、AER、`emu_pcie` 分配、IRQ 初始化、misc 注册、DMA Common 初始化、dmabuf 初始化、DMA 通道组织以及 SR-IOV 使能。 |
+| `pcie_emu_gpu_remove()` | GPU PF 卸载入口。先关闭 SR-IOV，再统一释放中断、misc、BAR 映射和其他附属资源。 |
+| `pcie_emu_gpu_free()` | GPU 清理核心函数，真正执行 IRQ 释放、dmabuf remove、misc 注销、BAR unmap、ROM/PCI 关闭。 |
+| `mt_emu_vf_enable()` | 控制 PF 侧 SR-IOV VF 的启停，并把 `vf_num` 写回到运行时上下文。 |
+| `show_bar0/show_bar2/show_bar4/show_bar6/show_vf()` | 给 `/sys/class/misc/mt_emu_gpu/` 导出可读属性，让用户态知道 BAR 地址和 VF 数量。 |
+| `resize_pcie_bar()` / `resize_fb_bar()` | 预留的 BAR resize 能力，主要用于尝试调整 BAR2/显存 BAR 大小，当前代码里大多以注释形式保留。 |
+
+可以把 `pcie_emu_gpu_probe()` 看成整个 GPU 驱动的“装配总流程”。
+
+### 13.2 `mt-emu-apu.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `pcie_apu_probe()` | APU 初始化入口。完成 PCI 使能、BAR0/BAR2 映射、AER、`emu_pcie` 初始化、中断初始化和 misc 注册。 |
+| `pcie_apu_remove()` | APU 卸载入口。调用统一释放函数回收资源。 |
+| `pcie_qy_free()` | APU 资源回收核心函数。 |
+| `emu_apu_error_detected()` / `emu_apu_slot_reset()` / `emu_apu_error_resume()` | AER 错误恢复回调，用来处理 PCIe 错误检测、slot reset 后恢复和 resume。 |
+
+APU 入口比 GPU 简单很多，当前 `probe()` 里没有像 GPU 那样继续接 `dmabuf`、EATA、MMU 初始化链路。
+
+### 13.3 `mt-emu-vgpu.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `pcie_emu_vgpu_probe()` | vGPU/VF 的初始化入口。完成设备使能、BAR 映射、`emu_pcie` 建立、MSI-X 初始化、静态 minor 注册、VF DMA 通道构建、DMA bare 初始化、`emu_mtdma_init()` 和 `mtdma_probe()`。 |
+| `pcie_emu_vgpu_remove()` | vGPU 卸载入口。 |
+| `pcie_emu_vgpu_free()` | vGPU 资源回收核心函数。 |
+| `emu_vgpu_error_detected()` / `emu_vgpu_slot_reset()` / `emu_vgpu_error_resume()` | vGPU AER 恢复路径。 |
+
+这里最值得注意的是：vGPU 设备名会带上 `devfn`，因此用户态看到的节点会是 `/dev/mt_emu_vgpu<devfn>`。
+
+### 13.4 `mt-emu-ioctl.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `mt_test_open()` | 打开设备，目前基本是空实现。 |
+| `mt_test_read()` | 当前返回 0，主要接口并不走这里。 |
+| `mt_test_write()` | 当前返回 0，主要接口并不走这里。 |
+| `mt_test_release()` | 关闭设备，目前也是空实现。 |
+| `mt_test_mmap()` | 允许用户态按 `vm_pgoff` 选择 BAR0/BAR2/BAR4/BAR6 映射到用户空间。 |
+| `mt_test_ioctl()` | 最核心的用户态控制入口。几乎所有高级操作都从这里分派。 |
+| `emu_dma_isr()` | 把 DMA 中断结果进一步分发给 bare DMA 或 mtdma 逻辑。 |
+
+`mt_test_ioctl()` 里主要分支的职责如下：
+
+| ioctl 分支 | 作用 |
+|---|---|
+| `MT_IOCTL_BAR_RW` | 通过 ioctl 方式读写 BAR 空间。 |
+| `MT_IOCTL_CFG_RW` | 读写 PCI 配置空间。 |
+| `MT_IOCTL_GET_POWER` | 查询当前 PCI 电源状态。 |
+| `MT_IOCTL_SUSPEND` / `MT_IOCTL_RESUME` | 让设备进入指定电源态，或恢复到 `PCI_D0`。 |
+| `MT_IOCTL_WAIT_INT` | 等待指定中断源完成。 |
+| `MT_IOCTL_TRIG_INT` | 触发软中断，用于测试中断链路。 |
+| `MT_IOCTL_IPC` | 给 DSP/FEC/SMC 发命令，并等待响应中断。 |
+| `MT_IOCTL_IRQ_INIT` | 切换中断模式并重新初始化中断。 |
+| `MT_IOCTL_READ_ROM` | 映射并读取扩展 ROM 的准备逻辑。 |
+| `MT_IOCTL_MTDMA_BARE_RW` | 走 bare DMA 通道。 |
+| `MT_IOCTL_MTDMA_RW` | 走 dmaengine 封装的 MTDMA 通道。 |
+| `MT_IOCTL_DMAISR_SET` | 控制当前 DMA 中断按 bare 模式还是 mtdma 模式处理。 |
+
+额外注意两点：
+
+1. `mt_test_read()` / `mt_test_write()` 目前几乎没有实际功能，真正有用的是 `mmap + ioctl`。
+2. 当前代码里 `MT_IOCTL_CFG_RW` 分支后缺少 `break`，会继续落入 `MT_IOCTL_SUSPEND` 分支。这属于一个已知实现问题，可参考 `driver/mt-emu-ioctl.c` 中 `mt_test_ioctl()` 的对应分支。
+
+### 13.5 `mt-emu-mtdma-bare.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `mtdma_comm_init()` | 初始化 DMA Common 区域的通道数、burst 长度、mask 等公共寄存器。 |
+| `build_dma_info()` | 为 PF 构建 DMA 读写通道的寄存器基址、链表地址、链表大小等信息。 |
+| `build_dma_info_vf()` | 为 VF/vGPU 构建专用 DMA 通道布局。 |
+| `mtdma_bare_init()` | 用 `mtdma_info` 初始化 PF bare DMA 运行时结构。 |
+| `mtdma_bare_init_vf()` | 用 `mtdma_info` 初始化 VF bare DMA 运行时结构。 |
+| `dma_bare_isr()` | 解析 bare DMA 通道完成/错误状态。 |
+| `dma_bare_xfer()` | 真正下发链表描述符并启动一次 bare DMA 传输。 |
+
+这部分是最接近硬件寄存器的 DMA 路径。
+
+### 13.6 `mt-emu-mtdma-test.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `emu_mtdma_init()` | 初始化 `emu_mtdma`，建立 mtdma 芯片对象、通道、完成量等上下文。 |
+| `emu_dma_rw()` | 处理一次用户态发起的 mtdma 读写请求，是 `MT_IOCTL_MTDMA_RW` 的主要后端。 |
+| `mtdma_xfer()` | 单次传输的内部封装，组织 DMA channel、sg 表和回调。 |
+| `mtdma_test_callback()` | DMA 完成回调。 |
+| `emu_mtdma_isr()` | mtdma 模式下的中断入口。 |
+
+### 13.7 `mt-emu-dmabuf.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `emu_dmabuf_probe()` | 分配或映射 DMA buffer，并注册 `/dev/mt_emu_dmabuf`。 |
+| `emu_dmabuf_remove()` | 释放 DMA buffer 设备资源。 |
+| `emu_dmabuf_read()` / `emu_dmabuf_write()` | 允许用户态直接读写这块 DMA buffer。 |
+| `emu_dmabuf_mmap()` | 把 DMA buffer 映射给用户态。 |
+
+### 13.8 `mmu_init_pagetable.c` 与 `eata_api.c` 关键函数
+
+| 函数 | 作用 |
+|---|---|
+| `gen_va_pool()` | 生成虚拟地址池。 |
+| `gen_pa_pool()` | 生成物理地址池。 |
+| `gen_page_desc()` | 生成页表项。 |
+| `setup_page_desc()` | 批量组织页描述符。 |
+| `mmu_init_pagetable()` | 初始化整个页表布局。 |
+| `pcie_mmu_cfg_init()` | 初始化 MMU 上下文配置。 |
+| `pcie_mmu_init()` | 把页表初始化和寄存器初始化串起来。 |
+| `gpu_eata_init()` / `vid_eata_init()` / `mtdma_eata_init()` | 初始化不同功能块的 EATA 通用配置。 |
+| `mtdma_eata_desc_init()` | 初始化 MTDMA 的 EATA 描述符。 |
+| `mtdma_eata_desc_en()` / `mtdma_eata_desc_dis()` | 使能/关闭某段地址映射。 |
+
+---
+
+## 14. 驱动初始化流程图 / 时序说明
+
+这一节给出更偏“读代码路径”的初始化顺序。
+
+### 14.1 GPU PF 初始化主流程
+
+```text
+PCIe 枚举到 GPU 设备
+    ↓
+pcie_emu_gpu_probe()
+    ↓
+pcim_enable_device()
+    ↓
+pcim_iomap_regions(BAR0/BAR2/BAR4)
+    ↓
+pci_enable_pcie_error_reporting()
+    ↓
+pci_set_master()
+    ↓
+devm_kzalloc(struct emu_pcie)
+    ↓
+初始化 mutex / completion / region[]
+    ↓
+pci_set_drvdata()
+    ↓
+irq_init(IRQ_MSI, 0)
+    ↓
+misc_register(/dev/mt_emu_gpu)
+    ↓
+mtdma_comm_init()
+    ↓
+emu_dmabuf_probe() -> 注册 /dev/mt_emu_dmabuf
+    ↓
+build_dma_info()
+    ↓
+mtdma_bare_init()
+    ↓
+emu_mtdma_init()
+    ↓
+mt_emu_vf_enable(VF_NUM)   [当 VF_NUM > 0]
+    ↓
+Probe success
+```
+
+补充理解：
+
+- **前半段**是标准 PCIe 驱动初始化；
+- **中段**开始挂 misc 设备和中断；
+- **后半段**把 DMA 运行环境组织起来；
+- **最后**才决定是否打开 SR-IOV。
+
+### 14.2 APU 初始化主流程
+
+```text
+PCIe 枚举到 APU 设备
+    ↓
+pcie_apu_probe()
+    ↓
+pci_enable_device()
+    ↓
+pcim_iomap_regions(BAR0/BAR2)
+    ↓
+pci_set_master()
+    ↓
+pci_enable_pcie_error_reporting()
+    ↓
+devm_kzalloc(struct emu_pcie)
+    ↓
+初始化 mutex / completion / region[]
+    ↓
+irq_init(IRQ_MSI, 0)
+    ↓
+misc_register(/dev/mt_emu_apu)
+    ↓
+Probe success
+```
+
+APU 的路径明显比 GPU 短，当前代码没有继续串接 `dmabuf -> bare DMA -> emu_mtdma_init` 这一整套初始化流程。
+
+### 14.3 vGPU / VF 初始化主流程
+
+```text
+PCIe 枚举到 vGPU 设备
+    ↓
+pcie_emu_vgpu_probe()
+    ↓
+pcim_enable_device()
+    ↓
+pcim_iomap_regions(BAR0/BAR2)
+    ↓
+pci_set_master()
+    ↓
+devm_kzalloc(struct emu_pcie)
+    ↓
+初始化 mutex / spinlock / completion / region[]
+    ↓
+irq_init(IRQ_MSIX, 0)
+    ↓
+misc_register(/dev/mt_emu_vgpu<devfn>)
+    ↓
+build_dma_info_vf()
+    ↓
+mtdma_bare_init_vf()
+    ↓
+emu_mtdma_init()
+    ↓
+mtdma_probe()
+    ↓
+Probe success
+```
+
+vGPU 与 GPU 最大不同点：
+
+- 不做 PF 那套 `dmabuf + SR-IOV` 逻辑；
+- 直接按 VF 地址布局构建 DMA 通道；
+- misc 设备名和 minor 号都与 `devfn` 绑定。
+
+### 14.4 用户态发起一次 bare DMA 的时序
+
+```text
+用户程序
+    ↓
+pcief_dma_bare_xfer()                  [test/lib/mt_pcie_f.c]
+    ↓
+ioctl(fd, MT_IOCTL_DMAISR_SET, ...)
+    ↓
+ioctl(fd, MT_IOCTL_MTDMA_BARE_RW, ...)
+    ↓
+mt_test_ioctl()
+    ↓
+dma_bare_xfer()
+    ↓
+写 DMA 描述符 / 启动通道
+    ↓
+硬件完成并触发中断
+    ↓
+emu_dma_isr() / dma_bare_isr()
+    ↓
+completion 唤醒
+    ↓
+ioctl 返回用户态
+```
+
+### 14.5 用户态发起一次 mtdma engine 传输的时序
+
+```text
+用户程序
+    ↓
+pcief_mtdma_engine_start()            [test/lib/mt_pcie_f.c]
+    ↓
+ioctl(fd, MT_IOCTL_DMAISR_SET, 0)
+    ↓
+ioctl(fd, MT_IOCTL_MTDMA_RW, ...)
+    ↓
+mt_test_ioctl()
+    ↓
+emu_dma_rw()
+    ↓
+mtdma_xfer()
+    ↓
+dmaengine / virt-dma / mtdma core
+    ↓
+回调 mtdma_test_callback()
+    ↓
+返回用户态
+```
+
+---
+
+## 15. 面向用户态测试程序的 ioctl 使用说明
+
+这一节对应仓库里的测试封装：`/test/lib/mt_pcie_f.c`。
+
+### 15.1 用户态是怎么找到设备的
+
+测试库并不是直接硬编码 BAR 地址，而是按下面流程工作：
+
+1. 打开设备节点
+   - GPU：`/dev/mt_emu_gpu`
+   - DMA Buffer：`/dev/mt_emu_dmabuf`
+   - vGPU：`/dev/mt_emu_vgpu<N>`
+2. 读取 sysfs 属性
+   - `/sys/class/misc/<device>/bar0`
+   - `/sys/class/misc/<device>/bar2`
+   - 以及 GPU 的 `/sys/class/misc/mt_emu_gpu/vf`
+3. 根据读到的 `paddr:vaddr:size` 信息，对 BAR 做 `mmap`
+
+也就是说，测试程序是通过 **misc 设备 + sysfs 属性** 来完成设备发现的。
+
+### 15.2 测试库里常用封装与对应 ioctl
+
+| 用户态封装 | 对应驱动能力 | 说明 |
+|---|---|---|
+| `pcief_io_write()` / `pcief_io_read()` | `MT_IOCTL_BAR_RW` | 通过 ioctl 访问 BAR 空间。 |
+| `pcief_cfg_write()` / `pcief_cfg_read()` | `MT_IOCTL_CFG_RW` | 读写 PCI 配置空间。 |
+| `pcief_get_power()` | `MT_IOCTL_GET_POWER` | 获取 PCI 电源状态。 |
+| `pcief_suspend()` | `MT_IOCTL_SUSPEND` | 请求设备切到指定电源态。 |
+| `pcief_resume()` | `MT_IOCTL_RESUME` | 让设备恢复到 `PCI_D0`。 |
+| `pcief_wait_int()` | `MT_IOCTL_WAIT_INT` | 等待指定中断源。 |
+| `pcief_trig_int()` | `MT_IOCTL_TRIG_INT` | 触发软中断测试。 |
+| `pcief_irq_init()` | `MT_IOCTL_IRQ_INIT` | 初始化或切换中断模式。 |
+| `pcief_tgt_cmd()` | `MT_IOCTL_IPC` | 向 DSP/FEC/SMC 发命令并等待返回。 |
+| `pcief_dma_bare_xfer()` | `MT_IOCTL_DMAISR_SET` + `MT_IOCTL_MTDMA_BARE_RW` | 走 bare DMA。 |
+| `pcief_mtdma_engine_start()` | `MT_IOCTL_DMAISR_SET` + `MT_IOCTL_MTDMA_RW` | 走 dmaengine/mtdma 封装路径。 |
+
+### 15.3 `mt_emu_param` 的意义
+
+大多数 ioctl 都把用户缓冲区的起始位置解释成一个 `struct mt_emu_param`：
+
+- `b0/b1/b2/b3`：常放小字段，例如 `bar`、`rw`、`irq type`
+- `d0/d1`：常放长度、状态、超时值
+- `l0/l1`：常放 offset、地址
+
+典型例子：
+
+- `MT_IOCTL_BAR_RW`
+  - `b0 = bar`
+  - `b1 = BAR_RD / BAR_WR`
+  - `d0 = size`
+  - `l0 = offset`
+  - 结构体后面紧跟实际读写数据
+
+- `MT_IOCTL_WAIT_INT`
+  - `b0 = 中断源编号`
+  - `d0 = timeout_ms`
+  - 返回时 `b0 = 0/1` 表示是否等到
+
+- `MT_IOCTL_IRQ_INIT`
+  - `b0 = 中断类型`
+  - `b1 = test_mode`
+  - 返回时 `b0 = 0/1` 表示成功或失败
+
+### 15.4 bare DMA 在用户态怎么调用
+
+测试库调用顺序如下：
+
+1. 构造 `struct dma_bare_rw`
+2. 把它放到 `mt_emu_param` 后面
+3. 先调用 `MT_IOCTL_DMAISR_SET` 让驱动按 bare DMA 模式处理中断
+4. 再调用 `MT_IOCTL_MTDMA_BARE_RW`
+
+`struct dma_bare_rw` 里的关键字段：
+
+- `sar`：源地址
+- `dar`：目的地址
+- `data_direction`：方向（H2H / H2D / D2H / D2D）
+- `desc_direction`：描述符放在 host 还是 device
+- `desc_cnt` / `block_cnt`：链表规模
+- `size`：数据量
+- `ch_num`：通道号
+- `timeout_ms`：超时
+
+### 15.5 mtdma engine 在用户态怎么调用
+
+测试库调用顺序如下：
+
+1. 通过 `pcief_mtdma_engine_malloc()` 分配一块带对齐余量的用户缓冲区
+2. 在缓冲区头部摆放 `mt_emu_param + struct mtdma_rw`
+3. 若有 payload，则放在 `arg + MTDMA_BUF_START` 后面
+4. 调用 `MT_IOCTL_DMAISR_SET(0)`，切换到 mtdma engine 模式
+5. 调用 `MT_IOCTL_MTDMA_RW`
+
+`struct mtdma_rw` 里的关键字段：
+
+- `laddr`：设备侧逻辑地址
+- `size`：数据大小
+- `timeout_ms`：超时
+- `test_cnt`：测试次数
+- `ch`：通道号
+- `dir`：读/写方向
+
+### 15.6 DMA buffer 设备的用法
+
+`/dev/mt_emu_dmabuf` 不主要靠 ioctl，而是直接用：
+
+- `read`
+- `write`
+- `mmap`
+
+测试库里的对应封装：
+
+- `pcief_dmabuf_write()`
+- `pcief_dmabuf_read()`
+- `pcief_dmabuf_malloc()`
+- `pcief_dmabuf_free()`
+
+其中：
+
+- `pcief_dmabuf_write/read()` 是对字符设备直接做 `lseek + read/write`
+- `pcief_dmabuf_malloc/free()` 是测试库自己维护的用户态块分配器，不是驱动里的内核分配接口
+
+### 15.7 当前实现下的几个注意事项
+
+1. `MT_IOCTL_BAR_RW` 在驱动里只允许 `bar=0` 或 `bar=2`。
+2. `MT_IOCTL_CFG_RW` 的已知实现问题见上文 13.4 节：当前代码会落入 `MT_IOCTL_SUSPEND` 分支。
+3. `MT_IOCTL_READ_ROM` 当前代码主要完成 ROM 映射/解除映射。真正把内容复制回用户态的逻辑被注释掉了。
+4. 对多数测试场景来说，**直接 mmap BAR + 少量 ioctl 控制** 才是主路径，而不是 `read/write`。
+
+---
