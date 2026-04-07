@@ -881,3 +881,250 @@ dmaengine / virt-dma / mtdma core
 4. 对多数测试场景来说，**直接 mmap BAR + 少量 ioctl 控制** 才是主路径，而不是 `read/write`。
 
 ---
+
+## 16. 当前驱动是如何把内核态和用户态隔离开的
+
+结合 `driver/` 和 `test/lib/mt_pcie_f.c` 的实现，当前仓库里的“隔离”更准确地说是 **Linux 设备文件边界上的职责分层**，而不是严格的安全封装。
+
+### 16.1 内核态当前负责什么
+
+内核态主要负责硬件资源与生命周期：
+
+- PCIe 设备探测、`probe/remove`
+- BAR 资源申请与内核映射
+- 中断初始化、回收和错误恢复
+- DMA buffer 分配或保留内存映射
+- bare DMA / mtdma engine 初始化
+- SR-IOV、VF、IATU、MMU、EATA 等硬件级配置
+- 注册 `/dev/mt_emu_gpu`、`/dev/mt_emu_dmabuf`、`/dev/mt_emu_vgpu<N>`
+- 导出 `/sys/class/misc/<device>/bar*`、`version`、`vf` 等 sysfs 元数据
+
+也就是说，**设备所有权、物理资源和执行路径仍然掌握在内核里**。
+
+### 16.2 用户态当前负责什么
+
+用户态主要负责控制、测试和策略：
+
+- 打开 `/dev/mt_emu_*`
+- 读取 `/sys/class/misc/<device>/bar*`
+- 对 BAR 或 DMA buffer 做 `mmap`
+- 通过 `ioctl` 发起 BAR/CFG 读写、DMA、IRQ、IPC、功耗控制
+- 自己组织测试流程、参数封装、超时和结果校验
+
+当前仓库里的测试程序基本就是按这种模式工作的，因此更接近“**用户态直接操控硬件能力，内核态提供通道**”。
+
+### 16.3 当前边界是通过哪些接口建立的
+
+主要只有三类接口：
+
+1. **misc 设备节点**
+   - `/dev/mt_emu_gpu`
+   - `/dev/mt_emu_dmabuf`
+   - `/dev/mt_emu_vgpu<N>`
+2. **sysfs 元数据**
+   - `bar0/bar2/bar4/bar6`
+   - `version`
+   - `vf`
+3. **`ioctl + mmap`**
+   - `copy_from_user/copy_to_user` 交换控制参数
+   - `remap_pfn_range()` 把 BAR 或 DMA buffer 映射给用户态
+
+因此当前实现的隔离点主要在于：
+
+- 用户态不能直接拿到内核里的 `struct emu_pcie`
+- 用户态不能自己接管 PCI 资源生命周期
+- 中断、DMA 初始化、SR-IOV、IATU、MMU、EATA 仍由内核统一管理
+
+### 16.4 当前边界为什么说“隔离不强”
+
+虽然边界存在，但暴露面也很大：
+
+- `mt_test_mmap()` 允许直接映射 BAR
+- `MT_IOCTL_BAR_RW` 允许用户态按 offset 访问 BAR
+- `MT_IOCTL_CFG_RW` 允许用户态访问 PCI 配置空间
+- `/dev/mt_emu_dmabuf` 直接暴露一块可被 DMA 使用的共享缓冲区
+
+这意味着当前驱动更适合：
+
+- bring-up
+- 板卡验证
+- 内部调试
+- 功能测试平台
+
+如果目标是正式产品驱动，这种接口设计通常还需要进一步收口。
+
+---
+
+## 17. 面向重构的新驱动分层建议
+
+如果要基于这个仓库重新构建一套更稳的驱动，建议把目标架构明确为：
+
+- **内核态负责资源、安全边界和执行**
+- **用户态负责策略、任务组织和业务逻辑**
+
+可以理解成“**薄内核 + 厚用户态库**”，但前提是只暴露受控 ABI，而不是把整块 BAR 和任意寄存器访问直接交给用户态。
+
+### 17.1 建议拆成四层
+
+#### 第一层：PCIe 内核核心层
+
+只负责硬件生命周期与平台能力：
+
+- `pci_driver` probe/remove
+- BAR 映射
+- DMA mask / IOMMU
+- 中断申请与回收
+- reset / AER / 电源管理
+- PF/VF 管理
+
+这一层建议只面向内核内部模块，不直接暴露给用户态。
+
+#### 第二层：内核资源服务层
+
+把硬件能力收敛成受控服务：
+
+- buffer 管理
+- DMA 提交与完成
+- doorbell / queue / mailbox
+- 中断事件分发
+- 上下文管理
+- 引用计数与并发保护
+- 多进程 / 多 VF 隔离
+
+这一层是未来正式驱动最关键的抽象层。
+
+#### 第三层：稳定用户态 ABI 层
+
+这一层才是对用户态公开的正式协议：
+
+- `ioctl`：创建上下文、提交任务、查询状态、释放资源
+- `mmap`：只映射共享 ring、命令队列、受控 buffer
+- `poll/eventfd`：等待完成事件
+- `sysfs/debugfs`：区分正式元数据与调试能力
+
+建议这里遵循三个约束：
+
+1. 默认**不映射整块 BAR**
+2. 默认**不开放任意 offset BAR/CFG 访问**
+3. 测试接口与正式 ABI **分离**
+
+#### 第四层：用户态运行库层
+
+建议在用户态补一层 `libdriver`：
+
+- 封装 `open/ioctl/mmap/poll`
+- 做参数组包和错误码处理
+- 统一超时、同步、日志和重试逻辑
+- 管理 buffer、queue、fence
+- 向上提供稳定 API
+
+这样未来协议演进时，业务代码不用直接绑定底层驱动细节。
+
+### 17.2 建议的模块边界清单
+
+如果继续在当前仓库演进，建议按职责把能力收拢成下面几个模块边界：
+
+| 建议模块 | 主要职责 | 当前代码可参考位置 |
+|---|---|---|
+| `core/` | PCIe probe/remove、BAR、AER、电源管理、reset | `mt-emu-gpu.c`、`mt-emu-apu.c`、`mt-emu-vgpu.c` |
+| `irq/` | MSI/MSI-X/Legacy、中断路由、完成通知 | `mt-emu-intr.c` |
+| `mem/` | DMA buffer、IOMMU、地址映射、页表、EATA | `mt-emu-dmabuf.c`、`mmu_init_pagetable.c`、`eata_api.c` |
+| `dma/` | bare DMA 与 dmaengine 封装 | `mt-emu-mtdma-bare.c`、`mt-emu-mtdma-test.c`、`mt-emu-mtdma-core.c` |
+| `abi/` | 稳定 ioctl 协议、uAPI 结构体、版本兼容 | 当前可从 `mt-emu-drv.h`、`mt-emu-ioctl.c` 中拆出 |
+| `pf/` | PF 专有能力，如 SR-IOV、VF 编排 | `mt-emu-gpu.c` |
+| `vf/` | VF 专有初始化和受限执行路径 | `mt-emu-vgpu.c` |
+| `debug/` | debugfs、测试 ioctl、寄存器调试通道 | 当前 `MT_IOCTL_BAR_RW`、`MT_IOCTL_CFG_RW`、测试中断等能力 |
+| `lib/` | 用户态封装库 | 当前 `test/lib/mt_pcie_f.c` 可作为原型参考 |
+| `tools/` | 测试程序、验证工具、带外调试工具 | `test/src/`、`test/shell/` |
+
+这里最关键的变化不是目录名本身，而是 **把“正式 ABI”与“调试/测试接口”明确分层**。
+
+### 17.3 从当前实现迁移时最值得优先收口的能力
+
+如果要做产品化重构，优先建议收口下面几类接口：
+
+1. **BAR 全量 mmap**
+   - 改成只映射共享队列、门铃页或受控共享缓冲区
+2. **任意 BAR/CFG 读写 ioctl**
+   - 仅保留 debug 通道，默认不对正式用户态开放
+3. **测试 ioctl 与正式 ABI 混合**
+   - 把测试路径挪到 `debugfs` 或专用调试设备
+4. **PF/VF 与业务控制混杂**
+   - PF 管理面、VF 执行面、测试接口分开
+
+---
+
+## 18. 推荐的重建顺序
+
+结合当前仓库的实现基础，建议按下面顺序推进：
+
+### 18.1 第一阶段：先稳定内核核心层
+
+先做好：
+
+- PCIe core
+- probe/remove
+- BAR 管理
+- IRQ
+- reset / AER / 电源管理
+
+这一阶段的目标是先让设备生命周期稳定下来。
+
+### 18.2 第二阶段：再稳定资源服务层
+
+再收敛：
+
+- DMA buffer 生命周期
+- DMA 提交模型
+- 中断完成路径
+- queue / doorbell / mailbox
+- 上下文与同步模型
+
+这一阶段结束后，内核内部应当已经具备“受控执行能力”。
+
+### 18.3 第三阶段：定义正式 uAPI
+
+这时再定义：
+
+- 上下文创建/销毁
+- buffer 导入/导出
+- 命令提交
+- 完成通知
+- 查询状态
+
+也就是先把内核内部抽象稳定，再冻结用户态协议。
+
+### 18.4 第四阶段：补用户态运行库
+
+用户态库负责：
+
+- ABI 封装
+- 参数校验
+- 同步等待
+- 错误码转换
+- 兼容不同驱动版本
+
+这样上层业务就不会直接依赖底层 ioctl 细节。
+
+### 18.5 第五阶段：最后补调试和测试能力
+
+最后再把：
+
+- 调试寄存器访问
+- 测试 DMA
+- 性能验证
+- 诊断工具
+
+作为调试层能力补齐，而不是让它们反向决定正式 ABI 形态。
+
+---
+
+## 19. 一句话总结当前仓库与推荐重构方向
+
+当前仓库的模式是：
+
+> **内核拿住设备资源，用户态通过 `/dev + sysfs + ioctl + mmap` 直接操控硬件。**
+
+如果面向正式产品重构，更推荐的方向是：
+
+> **内核负责资源、安全边界和执行；用户态负责策略和业务；BAR 访问尽量收敛为受控 ABI，而不是直接裸露。**
