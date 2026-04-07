@@ -1128,3 +1128,397 @@ dmaengine / virt-dma / mtdma core
 如果面向正式产品重构，更推荐的方向是：
 
 > **内核负责资源、安全边界和执行；用户态负责策略和业务；BAR 访问尽量收敛为受控 ABI，而不是直接裸露。**
+
+---
+
+## 20. 当前驱动是如何拿到 device 可用地址空间的
+
+这个问题放到当前仓库里，建议拆成两层理解：
+
+1. **主机侧可访问地址空间（host-visible）**
+2. **device 侧逻辑地址空间（device-local / logical）**
+
+二者都被代码大量使用，但来源完全不同。
+
+### 20.1 主机侧可访问地址空间：来自 PCI BAR
+
+GPU PF 和 vGPU/VF 的 `probe()` 流程基本一致，都是先让 Linux PCI 子系统把设备资源准备好，再把 BAR 信息记到驱动自己的 `region[]` 里。
+
+#### GPU PF 路径
+
+`/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-gpu.c`
+
+```text
+pcie_emu_gpu_probe()
+    ↓
+pcim_enable_device()
+    ↓
+pcim_iomap_regions(BAR0/BAR2/BAR4)
+    ↓
+for each BAR:
+    pci_resource_start()
+    pci_resource_len()
+    pcim_iomap_table()[i]
+    ↓
+emu_pcie->region[i]
+```
+
+对应代码位置：
+
+- `pcim_enable_device()`：`driver/mt-emu-gpu.c:431-436`
+- `pcim_iomap_regions()`：`driver/mt-emu-gpu.c:444-449`
+- `pci_resource_start()/pci_resource_len()/pcim_iomap_table()`：`driver/mt-emu-gpu.c:501-513`
+
+#### vGPU / VF 路径
+
+`/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-vgpu.c`
+
+```text
+pcie_emu_vgpu_probe()
+    ↓
+pcim_enable_device()
+    ↓
+pcim_iomap_regions(BAR0/BAR2)
+    ↓
+for each BAR:
+    pci_resource_start()
+    pci_resource_len()
+    pcim_iomap_table()[i]
+    ↓
+emu_pcie->region[i]
+```
+
+对应代码位置：
+
+- `pcim_enable_device()`：`driver/mt-emu-vgpu.c:240-245`
+- `pcim_iomap_regions()`：`driver/mt-emu-vgpu.c:247-252`
+- `pci_resource_start()/pci_resource_len()/pcim_iomap_table()`：`driver/mt-emu-vgpu.c:300-308`
+
+最终统一落到：
+
+- `struct emu_region { paddr, vaddr, size }`
+- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu.h:26-30`
+
+也就是说，**CPU 当前能直接访问到的 device 地址窗口，本质上就是 PCI BAR 暴露出来的 MMIO 空间**。
+
+### 20.2 device 侧逻辑地址空间：来自仓库内的固定地址布局约定
+
+除了 BAR 之外，代码里还有大量 `LADDR_*`、`SIZE_*`、`LVADDR_*` 常量。这些地址不是 Linux PCI 层“枚举出来”的，而是驱动和设备固件共同遵守的一套逻辑地址布局。
+
+核心定义在：
+
+- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-drv.h:57-103`
+
+典型地址包括：
+
+- `LADDR_APU`
+- `LADDR_MTDMA_LL_WR`
+- `LADDR_MTDMA_LL_RD`
+- `LADDR_VGPU_BASE`
+- `LADDR_VGPU(vf)`
+- `LADDR_OUTBOUND`
+- `LADDR_P2P`
+
+这部分可以理解成：
+
+- BAR 告诉主机“能从哪里碰到设备窗口”
+- `LADDR_*` 告诉驱动“设备内部把 DDR / outbound / VF / DMA link-list 逻辑上摆在什么位置”
+
+### 20.3 驱动如何把逻辑地址空间变成可用通道
+
+当前仓库主要靠三类机制把这些逻辑地址接起来。
+
+#### 1) IATU：把 inbound / outbound 地址窗编程进去
+
+IATU 相关 helper 在：
+
+- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu.h:134-188`
+
+包括：
+
+- `pcie_prog_inbound_atu()`
+- `pcie_prog_inbound_atu_vf()`
+- `pcie_prog_outbound_atu()`
+
+GPU PF 里 `iatu_init()` 会把：
+
+- PF0 BAR2
+- PF1 BAR2
+- outbound window
+- P2P window
+- VF inbound window
+
+这些地址窗配置好：
+
+- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-gpu.c:309-339`
+
+#### 2) DMA buffer：为 host/device 共享数据面准备物理区域
+
+`emu_dmabuf_probe()` 负责提供 DMA 可用的共享缓冲区：
+
+- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-dmabuf.c:193-255`
+
+它有两种模式：
+
+1. `DMA_RESV_MEM=1`
+   - 用固定物理地址
+   - `request_mem_region()`
+   - `ioremap()`
+2. `DMA_RESV_MEM=0`
+   - 用 `dma_alloc_coherent()`
+
+这块区域后面会被 DMA 和用户态 `/dev/mt_emu_dmabuf` 共同使用。
+
+#### 3) DMA 通道信息：把 BAR 寄存器窗口和逻辑地址拼成可执行通道
+
+DMA bare 路径里：
+
+- `build_dma_info()`
+- `build_dma_info_vf()`
+
+负责构造：
+
+- 通道寄存器地址 `rg_vaddr`
+- 链表逻辑地址 `ll_laddr`
+- 链表虚拟地址 `ll_vaddr`
+- host 侧链表地址 `ll_vaddr_system`
+
+对应代码在：
+
+- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-mtdma-bare.c:70-150`
+
+所以从代码视角看，当前 device 的“可用地址空间”并不是单一来源，而是：
+
+- **BAR 资源**：Linux PCI 子系统给出的 host-visible 窗口
+- **逻辑地址布局**：驱动和设备约定好的 device-local 地址图
+- **IATU/MMU/EATA/DMA**：负责把这两套地址真正接通
+
+### 20.4 用户态是怎么知道这些地址的
+
+当前用户态测试栈并不是直接写死 BAR 值，而是先读驱动暴露的 sysfs 元数据。
+
+驱动侧：
+
+- `show_bar*()` 输出 `paddr:vaddr:size`
+- GPU：`driver/mt-emu-gpu.c:61-101`
+- vGPU：`driver/mt-emu-vgpu.c:64-90`
+
+用户态侧：
+
+- 读 `/sys/class/misc/<device>/bar*`
+- 打开 `/dev/mt_emu_gpu`、`/dev/mt_emu_dmabuf`、`/dev/mt_emu_vgpu<N>`
+- 再对对应 fd 做 `mmap`
+
+参考实现：
+
+- `/home/runner/work/pcie_driver/pcie_driver/test/lib/mt_pcie_f.c:79-121`
+- `/home/runner/work/pcie_driver/pcie_driver/test/lib/mt_pcie_f.c:127-205`
+
+因此可以把当前链路压成一句话：
+
+> **内核通过 PCI BAR 拿到 host-visible 地址窗口，通过仓库内固定逻辑地址布局组织 device-local 空间，再经由 sysfs + `/dev` + `mmap/ioctl` 暴露给测试程序。**
+
+---
+
+## 21. 如果要单独构建“地址轮询”机制，建议如何合入
+
+这里的“地址轮询”不要直接实现成“对任意地址做任意条件轮询”的裸能力。更稳的做法是先明确轮询对象，再把它作为一个受控资源服务层接进来。
+
+### 21.1 先把轮询对象分型
+
+建议先明确要做的是哪一类：
+
+1. **BAR 寄存器轮询**
+   - 例如某个 doorbell/status 寄存器等待置位
+2. **共享内存 / DMA buffer / completion 区轮询**
+   - 例如 ring head/tail、completion word、mailbox memory
+3. **地址翻译状态轮询**
+   - 例如 IATU/MMU/EATA 配置状态、映射生效状态
+
+这三类对象的安全边界、地址校验方式和等待模型都不同，建议不要混成一个“万能轮询 ioctl”。
+
+### 21.2 推荐的合入位置：内核资源服务层新增 poll 子模块
+
+建议不要把轮询逻辑继续叠到 `mt_test_ioctl()` 里，而是新增独立轮询子模块，例如逻辑上归到：
+
+- `mem/`：如果主要轮询共享内存和地址映射状态
+- `dma/`：如果主要轮询 DMA completion / descriptor / queue
+- `poll/`：如果希望抽成通用地址观察器
+
+它至少要承担下面几件事：
+
+- 管理轮询对象注册和释放
+- 校验地址是否属于白名单范围
+- 管理比较条件、超时、轮询周期、并发
+- 区分 PF / VF 的可见地址域
+- 返回命中、超时、取消、非法地址等结果
+
+### 21.3 强烈建议先做“地址域白名单”
+
+当前仓库已经有直接暴露 BAR/CFG 的测试能力，所以如果再做轮询，必须比现有接口更收敛。
+
+建议只允许轮询下面这些受控范围：
+
+1. `emu_pcie->region[]` 里的指定 BAR 白名单区间
+   - 例如 doorbell、status、mailbox 寄存器页
+2. `emu_dmabuf` 管理的共享缓冲区
+   - 例如 completion 区、共享 ring、测试页
+3. DMA 通道已知完成区
+   - 由 bare DMA / mtdma engine 明确给出
+4. 明确标记为 debug-only 的观察区
+
+不建议：
+
+- 允许任意 BAR offset
+- 允许任意物理地址
+- 允许任意逻辑地址 `LADDR_*`
+- 允许用户态自己传入一段未知地址后无限轮询
+
+### 21.4 不建议的合入方式
+
+从当前代码结构看，下面几种方式都不推荐：
+
+1. **继续往 `MT_IOCTL_BAR_RW` 上叠功能**
+   - 会把“测试寄存器访问”和“正式轮询 ABI”进一步耦合
+2. **直接扩展 `mt_test_ioctl()` 成轮询总入口**
+   - 这个文件已经承担太多测试控制路径
+3. **让用户态传裸地址 + 条件 + 无限循环**
+   - 无法建立稳定边界，也不利于 PF/VF 隔离
+
+### 21.5 推荐的 ABI 设计方向
+
+如果轮询能力准备长期保留，建议单独定义新的 ABI，而不是复用现有 `MT_IOCTL_BAR_RW` / `MT_IOCTL_CFG_RW`。
+
+更推荐的两种模式是：
+
+#### 方案 A：独立 ioctl 家族
+
+例如把轮询相关 ABI 独立成一组“创建 / 等待 / 查询 / 释放”接口：
+
+- 创建轮询对象
+- 启动轮询
+- 查询状态
+- 停止轮询
+- 释放对象
+
+这样可以把参数校验、对象生命周期和错误码定义清楚。
+
+#### 方案 B：`poll/eventfd` + 状态页
+
+如果轮询最终是为了“等完成事件”，更推荐：
+
+- 内核内部做地址观察
+- 用户态只等待事件
+- 共享状态页只承载结果，不直接承载任意地址访问能力
+
+这样更像正式产品驱动的模型。
+
+### 21.6 对这个仓库的具体落地建议
+
+如果就在当前仓库上演进，建议按下面顺序落：
+
+#### 第一步：先补内核内部地址观察器
+
+先只做内核内部服务，不急着对用户态开放所有能力。至少先明确：
+
+- 轮询对象类型
+- 地址白名单模型
+- 比较条件（等于/不等于/位掩码/边沿）
+- 超时模型
+- 睡眠轮询还是 busy poll
+- PF/VF 是否共用代码路径
+
+#### 第二步：再补正式用户态入口
+
+按目标用途分开：
+
+- **正式长期能力**
+  - 单独 ABI
+  - 独立对象生命周期
+  - 默认只允许白名单地址域
+- **bring-up / debug 能力**
+  - 放 `debugfs`
+  - 或单独 debug char device
+
+#### 第三步：最后再接入现有 DMA / mailbox / queue 路径
+
+真正让轮询机制被业务复用时，再把它接到：
+
+- DMA completion
+- mailbox 状态位
+- VF 共享状态页
+- PF/VF doorbell
+
+这样轮询机制就是“资源服务层能力”，而不是“裸地址调试入口”。
+
+---
+
+## 22. 地址轮询机制的建议模块边界与接口草案
+
+这一节给一个更贴近当前仓库的落地草案，重点是“边界”，不是具体代码写法。
+
+### 22.1 建议新增的内核模块职责
+
+| 建议模块 | 主要职责 | 与现有代码的关系 |
+|---|---|---|
+| `poll/core` | 轮询对象生命周期、状态机、并发控制 | 新增 |
+| `poll/mmio` | BAR 白名单区间校验、MMIO 读值、比较条件 | 依赖 `emu_pcie->region[]` |
+| `poll/mem` | 共享内存 / dmabuf / completion 区观察 | 依赖 `emu_dmabuf` |
+| `poll/event` | 将轮询命中结果转成等待事件 | 可与现有 completion / waitqueue 协作 |
+| `abi/poll_uapi` | 正式轮询请求/结果结构体与 ioctl 编号 | 从现有 `mt-emu-drv.h` 拆分 |
+| `debug/poll_debug` | 调试用地址轮询入口 | 仅面向 bring-up |
+
+### 22.2 建议对 PF / VF 分开建白名单
+
+当前仓库里 PF 和 VF 的 BAR 布局、DMA 路径、设备职责并不完全一样，因此建议：
+
+- PF 单独一套白名单表
+- VF 单独一套白名单表
+- debug-only 区域单独打标
+
+不要只做一张“全设备通用地址表”。
+
+### 22.3 建议的请求语义
+
+建议用户态只描述“要观察什么”，而不是直接描述“内核怎么循环”。
+
+请求语义至少应包含：
+
+- 轮询对象类型
+- 目标域（PF / VF / dmabuf / debug）
+- 域内 offset 或命名对象
+- 数据宽度（8/16/32/64）
+- 比较条件
+- 掩码
+- 期望值
+- 超时
+- 轮询周期
+
+返回语义至少应包含：
+
+- 是否命中
+- 最后一次读取值
+- 结束原因（命中 / 超时 / 取消 / 非法地址）
+
+### 22.4 用户态库建议怎么接
+
+当前 `test/lib/mt_pcie_f.c` 可以继续保留为测试原型，但建议不要把正式轮询能力直接塞回这个文件里与 BAR/CFG 裸访问混用。
+
+更稳的做法是：
+
+- 新增独立用户态封装层
+- 业务只传“轮询对象 + 条件 + 超时”
+- 由用户态库统一组包、等待、错误处理
+
+这样未来即使把底层实现从 busy poll 改成事件驱动，也不会影响业务代码。
+
+### 22.5 一句话合入建议
+
+如果这套地址轮询机制只是为了 bring-up 或临时调试，建议放到 **debug 路径**；
+
+如果它准备长期存在，建议把它放进 **内核资源服务层 + 独立 ABI**，并且从第一版开始就坚持：
+
+- 只允许受控地址域
+- PF/VF 分开做白名单
+- 不复用 `MT_IOCTL_BAR_RW`
+- 不继续扩大 `mt_test_ioctl()` 的职责
