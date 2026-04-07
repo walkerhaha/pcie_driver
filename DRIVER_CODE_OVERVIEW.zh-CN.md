@@ -1146,7 +1146,7 @@ GPU PF 和 vGPU/VF 的 `probe()` 流程基本一致，都是先让 Linux PCI 子
 
 #### GPU PF 路径
 
-`/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-gpu.c`
+`driver/mt-emu-gpu.c`
 
 ```text
 pcie_emu_gpu_probe()
@@ -1171,7 +1171,7 @@ emu_pcie->region[i]
 
 #### vGPU / VF 路径
 
-`/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-vgpu.c`
+`driver/mt-emu-vgpu.c`
 
 ```text
 pcie_emu_vgpu_probe()
@@ -1197,7 +1197,7 @@ emu_pcie->region[i]
 最终统一落到：
 
 - `struct emu_region { paddr, vaddr, size }`
-- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu.h:26-30`
+- `driver/mt-emu.h:26-30`
 
 也就是说，**CPU 当前能直接访问到的 device 地址窗口，本质上就是 PCI BAR 暴露出来的 MMIO 空间**。
 
@@ -1207,7 +1207,7 @@ emu_pcie->region[i]
 
 核心定义在：
 
-- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-drv.h:57-103`
+- `driver/mt-emu-drv.h:57-103`
 
 典型地址包括：
 
@@ -1232,7 +1232,7 @@ emu_pcie->region[i]
 
 IATU 相关 helper 在：
 
-- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu.h:134-188`
+- `driver/mt-emu.h:134-188`
 
 包括：
 
@@ -1250,13 +1250,13 @@ GPU PF 里 `iatu_init()` 会把：
 
 这些地址窗配置好：
 
-- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-gpu.c:309-339`
+- `driver/mt-emu-gpu.c:309-339`
 
 #### 2) DMA buffer：为 host/device 共享数据面准备物理区域
 
 `emu_dmabuf_probe()` 负责提供 DMA 可用的共享缓冲区：
 
-- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-dmabuf.c:193-255`
+- `driver/mt-emu-dmabuf.c:193-255`
 
 它有两种模式：
 
@@ -1285,7 +1285,7 @@ DMA bare 路径里：
 
 对应代码在：
 
-- `/home/runner/work/pcie_driver/pcie_driver/driver/mt-emu-mtdma-bare.c:70-150`
+- `driver/mt-emu-mtdma-bare.c:70-150`
 
 所以从代码视角看，当前 device 的“可用地址空间”并不是单一来源，而是：
 
@@ -1311,8 +1311,8 @@ DMA bare 路径里：
 
 参考实现：
 
-- `/home/runner/work/pcie_driver/pcie_driver/test/lib/mt_pcie_f.c:79-121`
-- `/home/runner/work/pcie_driver/pcie_driver/test/lib/mt_pcie_f.c:127-205`
+- `test/lib/mt_pcie_f.c:79-121`
+- `test/lib/mt_pcie_f.c:127-205`
 
 因此可以把当前链路压成一句话：
 
